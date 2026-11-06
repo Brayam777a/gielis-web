@@ -1,0 +1,38 @@
+{
+  "case": "Transmitter mode",
+  "reference": "Table 3, transmitter column; results in Section 3.2 (Illustrative examples) of the SoftwareX manuscript",
+  "gielis_parameters": { "a": 1, "b": 1, "m": 3.4, "n1": 1, "n2": -2, "n3": 1 },
+  "substrate": {
+    "material": "Rogers RO4003C",
+    "length_mm": 30, "width_mm": 30, "thickness_mm": 1.524,
+    "relative_permittivity": 3.55, "loss_tangent": 0.002
+  },
+  "metal": {
+    "material": "PEC",
+    "thickness_mm": 0.035,
+    "layout": "Two variants evaluated from the same Gielis parameters: conventional metallic resonators, and complementary slots in a metallic screen"
+  },
+  "concentric_geometry": {
+    "gap_mm": 1, "size_1": 11.6, "size_2": 8.6,
+    "rotation_deg": 0, "dx_mm": 0, "dy_mm": 0,
+    "structure_type": ["Normal", "Complementary"]
+  },
+  "simulation_setup": {
+    "frequency_range_GHz": [1, 8],
+    "boundaries": "Unit cell in x/y, open (add space) in z",
+    "excitation": "Floquet mode ports, normal incidence",
+    "result": "Co-polarised SZmin(1),Zmax(1), i.e. S21"
+  },
+  "reported_results": {
+    "conventional": {
+      "minimum_1": { "frequency_GHz": 3.114, "S21_dB": -37.42 },
+      "maximum":   { "frequency_GHz": 3.478, "S21_dB": -0.07 },
+      "minimum_2": { "frequency_GHz": 5.403, "S21_dB": -51.01 }
+    },
+    "complementary": {
+      "minimum": { "frequency_GHz": 3.513, "S21_dB": -46.42 },
+      "maximum": { "frequency_GHz": 4.745, "S21_dB": -0.08 }
+    }
+  },
+  "notes": "Values as reported in the manuscript text and Table 3. Full swept S-parameter export (.txt/.s2p from CST) is not included here; regenerate with GielisMetaCST.mlapp using these parameters and CST Studio Suite to reproduce the full curves of Fig. 5(b) and (d)."
+}

@@ -1,0 +1,29 @@
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Node / Vite
+node_modules/
+dist/
+.vite/
+*.local
+
+# CST: proyectos y resultados generados (pesan mucho y se regeneran)
+*.cst
+CST_MicrowaveStudio_Files/
+backend/jobs_data/
+
+# Exportes de MATLAB para comparar (se generan en cada máquina)
+*_app.json
+matlab_geometry_reference.json
+
+# Editor / sistema
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db

@@ -1,0 +1,293 @@
+{
+  "schema_version": 1,
+  "description": "Golden geometry signatures for GielisMetaCST MATLAB cases.",
+  "purpose": "Regression validation of GielisGeometryService before CSTAdapter integration.",
+  "cases": {
+    "absorber": {
+      "source_case": "Absorber mode",
+      "source_json": "absorber_case_params.json",
+      "gielis_parameters": {
+        "a": 4,
+        "b": 3.6,
+        "m": 8,
+        "n1": 1.1,
+        "n2": 1.7,
+        "n3": 1.7
+      },
+      "curve": {
+        "sample_count": 8000,
+        "period_multiplier_u": 2,
+        "rho_min": 6.9833991272158755,
+        "rho_max": 8.5203287155197
+      },
+      "base_envelope": {
+        "area_mm2": 174.6751260503125,
+        "bounds_mm": [
+          -8.512490557354974,
+          -8.512404954994953,
+          8.512117536578542,
+          8.512569160980508
+        ],
+        "vertex_count_closed": 721,
+        "hash_rounded_10dp": "fb3fad40bdec77fd15647b139b1bc773b701559d0c9e8ac64082486b1ab6abbf"
+      },
+      "concentric": {
+        "c1": {
+          "area_mm2": 393.01903361320353,
+          "bounds_mm": [
+            -12.768735836032462,
+            -12.768607432492429,
+            12.768176304867811,
+            12.768853741470762
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "8fb6f4c82bee463171e1d6cfec50eab58d8f9a39ce0f24fd24111fe8f385f6da"
+        },
+        "c2": {
+          "area_mm2": 300.69552584920757,
+          "bounds_mm": [
+            -11.16875061016216,
+            -11.168638296215462,
+            11.16826119099672,
+            11.16885374147076
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "d20bfa6e7f6fc3fdd78a4c28dad066c23689e8b1e554a8f62d9ed5b6a236348f"
+        },
+        "c3": {
+          "area_mm2": 174.6751260503125,
+          "bounds_mm": [
+            -8.512490557354974,
+            -8.512404954994953,
+            8.512117536578542,
+            8.512569160980508
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "fb3fad40bdec77fd15647b139b1bc773b701559d0c9e8ac64082486b1ab6abbf"
+        },
+        "c4": {
+          "area_mm2": 115.18309329641906,
+          "bounds_mm": [
+            -6.912505331484673,
+            -6.912435818717985,
+            6.91220242270745,
+            6.9125691609805076
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "4592ef190c2145a410ba11d99c0f25af2db54d6d267ca1fb6bc87329cc73c628"
+        },
+        "gap_mm": 1.6,
+        "size_1": 1.5,
+        "size_2_requested": 1.0,
+        "rotation_deg": 0.0,
+        "dx_mm": 0.0,
+        "dy_mm": 0.0
+      },
+      "normal": {
+        "ring1_area_mm2": 92.32350776399551,
+        "ring2_area_mm2": 59.4920327538932,
+        "total_area_mm2": 151.81554051788945
+      }
+    },
+    "transmitter": {
+      "source_case": "Transmitter mode",
+      "source_json": "transmitter_case_params.json",
+      "gielis_parameters": {
+        "a": 1,
+        "b": 1,
+        "m": 3.4,
+        "n1": 1,
+        "n2": -2,
+        "n3": 1
+      },
+      "curve": {
+        "sample_count": 8000,
+        "period_multiplier_u": 20,
+        "rho_min": 3.8562780299978765e-08,
+        "rho_max": 1.0
+      },
+      "base_envelope": {
+        "area_mm2": 2.6789862723892313,
+        "bounds_mm": [
+          -0.973594408810328,
+          -0.9850074207934663,
+          0.9906554911331888,
+          0.9842178882294912
+        ],
+        "vertex_count_closed": 721,
+        "hash_rounded_10dp": "368e939734503277d1e0be632792239b8cf5e3d2ee2ccb1b190c8a3791a0cdc1"
+      },
+      "concentric": {
+        "c1": {
+          "area_mm2": 360.48439281269503,
+          "bounds_mm": [
+            -11.293695142199804,
+            -11.426086081204208,
+            11.49160369714499,
+            11.416927503462098
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "a07be510c5710e45ae728b3bafd4da27c3defc6338f6f594cd5c20a28602dcaf"
+        },
+        "c2": {
+          "area_mm2": 300.47541306856,
+          "bounds_mm": [
+            -10.310917155781281,
+            -10.43178742782801,
+            10.49160369714499,
+            10.423425830036084
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "07d85059b0b24623c1b2e678ed19ee7fc09426926da352da16698f009fec1228"
+        },
+        "c3": {
+          "area_mm2": 198.13782470590778,
+          "bounds_mm": [
+            -8.372911915768821,
+            -8.47106381882381,
+            8.519637223745423,
+            8.464273838773623
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "c8dd08ad6f840d8a26a4c56e9118824ad175d5820fe9d714390464b96a9b65cd"
+        },
+        "c4": {
+          "area_mm2": 154.3543822733844,
+          "bounds_mm": [
+            -7.390133929350298,
+            -7.476765165447611,
+            7.519637223745423,
+            7.470772165347611
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "60325b8511f2a2c9765c0f8af3f9712cea1014ca8ed4a9e9b79425441201eb32"
+        },
+        "gap_mm": 1.0,
+        "size_1": 11.6,
+        "size_2_requested": 8.6,
+        "rotation_deg": 0.0,
+        "dx_mm": 0.0,
+        "dy_mm": 0.0
+      },
+      "normal": {
+        "ring1_area_mm2": 60.0089797441359,
+        "ring2_area_mm2": 43.78344243252286,
+        "total_area_mm2": 103.79242217665836
+      },
+      "complementary": {
+        "top_copper_area_mm2": 900.0,
+        "remaining_area_mm2": 796.2075778233411
+      }
+    },
+    "sensor": {
+      "source_case": "Sensor mode",
+      "source_json": "sensor_case_params.json",
+      "gielis_parameters": {
+        "a": 1.5,
+        "b": 1.5,
+        "m": 6,
+        "n1": 1.5,
+        "n2": 1.5,
+        "n3": 1.5
+      },
+      "curve": {
+        "sample_count": 8000,
+        "period_multiplier_u": 2,
+        "rho_min": 1.3363480804313401,
+        "rho_max": 1.5
+      },
+      "base_envelope": {
+        "area_mm2": 6.171094550618887,
+        "bounds_mm": [
+          -1.4986639324921127,
+          -1.3430574877193824,
+          1.4986089137259955,
+          1.3430558000607364
+        ],
+        "vertex_count_closed": 721,
+        "hash_rounded_10dp": "58c94494522391161f5e03c8e3e5612ac4896226507fe70fb7100e51773a4d19"
+      },
+      "concentric": {
+        "c1": {
+          "area_mm2": 35.54550461156476,
+          "bounds_mm": [
+            -3.5967934379810704,
+            -3.2233379705265177,
+            3.596661392942389,
+            3.2233339201457674
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "334c22a1b77ab6a8f63b3fdd11318824f8b0a6ace36a880c4a2efa0c63f64790"
+        },
+        "c2": {
+          "area_mm2": 18.528071491987642,
+          "bounds_mm": [
+            -2.5967985749603915,
+            -2.3271726866743228,
+            2.5967032416102307,
+            2.32716976239659
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "03437e7da0f682c8f4486c7e4da1ef6d3879476bf6bce359b2617cc6eddbe282"
+        },
+        "c3": {
+          "area_mm2": 12.095345319213013,
+          "bounds_mm": [
+            -2.0981295054889575,
+            -1.8802804828071351,
+            2.0980524792163937,
+            1.880278120085031
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "2c9ad69978903162149b0489e32983b72f2dc6544e5e6594463d4e8099b81c44"
+        },
+        "c4": {
+          "area_mm2": 3.313331383404472,
+          "bounds_mm": [
+            -1.0981346424682787,
+            -0.9841151989549403,
+            1.0980943278842354,
+            0.9841139623358534
+          ],
+          "vertex_count_closed": 721,
+          "hash_rounded_10dp": "3cc895ccf44f09603afae3a03a6960e170f906890918856ee630dd48d8cea686"
+        },
+        "gap_mm": 1.0,
+        "size_1": 2.4,
+        "size_2_requested": 1.4,
+        "rotation_deg": 0.0,
+        "dx_mm": 0.0,
+        "dy_mm": 0.0
+      },
+      "sensor": {
+        "centering_translation_mm": [
+          6.6022519340736e-05,
+          2.0251903751766775e-06
+        ],
+        "centered_bounds_mm": [
+          -3.5967274154617295,
+          -3.2233359453361423,
+          3.5967274154617295,
+          3.2233359453361423
+        ],
+        "ring1_slot_area_mm2": 16.70532966796484,
+        "ring2_slot_area_mm2": 8.46997039809377,
+        "bridge1_area_mm2": 0.3745676257509902,
+        "bridge2_area_mm2": 0.3745667681068191,
+        "bridge1_bounds_mm": [
+          -0.17493397748065911,
+          2.226728003397547,
+          0.17506602251934092,
+          3.2969212198289477
+        ],
+        "bridge2_bounds_mm": [
+          -0.1749339774806596,
+          -1.9603558364061486,
+          0.17506602251934059,
+          -0.8901650703866654
+        ],
+        "sensor_cutters_area_mm2": 25.175300066058547
+      }
+    }
+  }
+}

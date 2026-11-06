@@ -1,0 +1,47 @@
+{
+  "case": "Sensor mode",
+  "reference": "Table 3, sensor column; results in Section 3.3 (Illustrative examples) of the SoftwareX manuscript",
+  "gielis_parameters": { "a": 1.5, "b": 1.5, "m": 6, "n1": 1.5, "n2": 1.5, "n3": 1.5 },
+  "substrate": {
+    "material": "FR-4 (lossy)",
+    "length_mm": 13, "width_mm": 20, "thickness_mm": 1.6,
+    "relative_permittivity": 4.3, "loss_tangent": 0.02
+  },
+  "metal": {
+    "material": "Copper (annealed)",
+    "thickness_mm": 0.035,
+    "layout": "Microstrip line on top face; complementary Gielis-CSRR slots in the ground plane"
+  },
+  "transmission_line": { "microstrip_width_mm": 3 },
+  "concentric_geometry": {
+    "gap_mm": 1, "size_1": 2.4, "size_2": 1.4,
+    "rotation_deg": 0, "dx_mm": 0, "dy_mm": 0,
+    "structure_type": "Complementary (locked in Sensor mode)"
+  },
+  "characterization_setup": {
+    "analyte_droplet_radius_mm": 1.5,
+    "note": "Droplet added manually in CST Studio Suite after the base structure was built by GielisMeta-CST; not an automated step in v1.0.0",
+    "relative_permittivities_swept": [1, 10, 20, 30, 40, 50, 60, 70]
+  },
+  "simulation_setup": {
+    "frequency_range_GHz": [1, 8],
+    "boundaries": "Open in all directions",
+    "excitation": "Two waveguide ports at the ends of the microstrip line",
+    "result": "S-parameters (S21)"
+  },
+  "reported_results": {
+    "resonant_frequency_vs_permittivity": [
+      { "er": 1,  "fr_GHz": 4.171, "delta_fr_MHz_vs_ref": 0 },
+      { "er": 10, "fr_GHz": 3.982, "delta_fr_MHz_vs_ref": 189 },
+      { "er": 20, "fr_GHz": 3.912, "delta_fr_MHz_vs_ref": 259 },
+      { "er": 30, "fr_GHz": 3.877, "delta_fr_MHz_vs_ref": 294 },
+      { "er": 40, "fr_GHz": 3.863, "delta_fr_MHz_vs_ref": 308 },
+      { "er": 50, "fr_GHz": 3.835, "delta_fr_MHz_vs_ref": 336 },
+      { "er": 60, "fr_GHz": 3.835, "delta_fr_MHz_vs_ref": 336 },
+      { "er": 70, "fr_GHz": 3.821, "delta_fr_MHz_vs_ref": 350 }
+    ],
+    "total_shift_MHz": 350,
+    "average_sensitivity_MHz_per_unit": 5.07
+  },
+  "notes": "Values as reported in the manuscript text and Table 3/4. Full swept S-parameter export (.txt/.s2p from CST) is not included here; regenerate with GielisMetaCST.mlapp using these parameters and CST Studio Suite to reproduce the full curve of Fig. 6(c)."
+}

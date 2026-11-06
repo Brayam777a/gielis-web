@@ -1,0 +1,31 @@
+{
+  "case": "Absorber mode",
+  "reference": "Table 3, absorber column; results in Section 3.1 (Illustrative examples) of the SoftwareX manuscript",
+  "gielis_parameters": { "a": 4, "b": 3.6, "m": 8, "n1": 1.1, "n2": 1.7, "n3": 1.7 },
+  "substrate": {
+    "material": "FR-4 (lossy)",
+    "length_mm": 30, "width_mm": 30, "thickness_mm": 1.6,
+    "relative_permittivity": 4.3, "loss_tangent": 0.02
+  },
+  "metal": {
+    "material": "Copper (annealed)",
+    "thickness_mm": 0.035,
+    "layout": "Gielis-inspired resonators on top face; continuous ground plane on bottom face"
+  },
+  "concentric_geometry": {
+    "gap_mm": 1.6, "size_1": 1.5, "size_2": 1.0,
+    "rotation_deg": 0, "dx_mm": 0, "dy_mm": 0,
+    "structure_type": "Normal"
+  },
+  "simulation_setup": {
+    "frequency_range_GHz": [1, 8],
+    "boundaries": "Unit cell in x/y, open (add space) in z",
+    "excitation": "Floquet mode ports, normal incidence"
+  },
+  "reported_results": {
+    "resonance_1": { "frequency_GHz": 2.435, "S11_dB": -16.87, "absorptance_pct": 97.9 },
+    "resonance_2": { "frequency_GHz": 3.849, "S11_dB": -10.26, "absorptance_pct": 90.6 },
+    "resonance_3": { "frequency_GHz": ">7", "note": "weaker resonance, reported only as an additional feature; exact peak value not tabulated in the manuscript" }
+  },
+  "notes": "Values as reported in the manuscript text and Table 3. Full swept S-parameter export (.txt/.s2p from CST) is not included here; regenerate with GielisMetaCST.mlapp using these parameters and CST Studio Suite to reproduce the full curve of Fig. 4(b)."
+}
