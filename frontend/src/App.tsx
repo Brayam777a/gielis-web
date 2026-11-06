@@ -1,11 +1,21 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import './App.css'
 import { BoardPreview, type Layer, type LegendItem } from './components/BoardPreview.tsx'
 import { CaseJson } from './components/CaseJson.tsx'
+import { OpenCase } from './components/OpenCase.tsx'
 import { ParameterField } from './components/ParameterField.tsx'
 import { SelectField } from './components/SelectField.tsx'
-import { analyzeDesign, FIELD_GROUPS, toInputs, type FieldKey, type Inputs } from './lib/design.ts'
+import {
+  analyzeDesign,
+  FIELD_GROUPS,
+  fitToSubstrate,
+  MONITOR_OPTIONS,
+  toInputs,
+  type FieldKey,
+  type Inputs,
+} from './lib/design.ts'
 import { EXAMPLES, MODE_NAMES, type Mode, type StructureType } from './lib/examples.ts'
+import type { LoadedCase } from './lib/caseFile.ts'
 import { CURVE_SAMPLES, ENVELOPE_BINS } from './lib/gielis.ts'
 import { CONDUCTORS, DIELECTRICS, findDielectric } from './lib/materials.ts'
 
@@ -21,6 +31,15 @@ function format(v: number, digits = 3): string {
   return v.toLocaleString('es-CO', { maximumFractionDigits: digits })
 }
 
+/** Redondea a centésimas de mm y lo devuelve como texto para el campo. */
+const toField = (v: number) => String(Math.round(v * 100) / 100)
+
+/** Secciones abiertas al empezar: las que más se usan. */
+const INITIALLY_OPEN: Record<string, boolean> = {
+  'Curva de Gielis': true,
+  'Anillos concéntricos': true,
+}
+
 export default function App() {
   // Estado: lo que el usuario puede cambiar.
   // Los campos guardan TEXTO, no números: así se puede escribir "-" o "1."
@@ -30,6 +49,10 @@ export default function App() {
   const [structureType, setStructureType] = useState<StructureType>('normal')
   const [view, setView] = useState<View>('structure')
   const [showCurve, setShowCurve] = useState(true)
+  const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(INITIALLY_OPEN)
+  const [fitMessage, setFitMessage] = useState<string | null>(null)
+  // dx y dy al empezar a arrastrar la figura (el arrastre suma a partir de ahí).
+  const dragOrigin = useRef({ dx: 0, dy: 0 })
 
   // En modo sensor la estructura siempre es complementaria (como en la app).
   const effectiveStructure: StructureType = mode === 'sensor' ? 'complementary' : structureType
@@ -63,6 +86,43 @@ export default function App() {
       dielectric: id,
       ...(preset ? { eps_r: String(preset.eps_r), loss_tangent: String(preset.loss_tangent) } : {}),
     }))
+  }
+
+  /** Escala la figura para que el anillo exterior quepa en el sustrato. */
+  function fitStructure() {
+    if (!envelope) return
+    const fit = fitToSubstrate(inputs, envelope)
+    if (fit) {
+      setInputs((prev) => ({ ...prev, ...fit }))
+      setFitMessage(`Tamaño 1 = ${fit.size1} y Tamaño 2 = ${fit.size2}: el anillo exterior queda a un margen del borde.`)
+    } else {
+      setFitMessage('No cabe con este desplazamiento: acerca dx y dy a 0 o agranda el sustrato.')
+    }
+  }
+
+  const moveHandlers = {
+    start: () => {
+      dragOrigin.current = { dx: Number(inputs.dx_mm) || 0, dy: Number(inputs.dy_mm) || 0 }
+    },
+    drag: (ddx: number, ddy: number) => {
+      const { dx, dy } = dragOrigin.current
+      setInputs((prev) => ({ ...prev, dx_mm: toField(dx + ddx), dy_mm: toField(dy + ddy) }))
+    },
+    nudge: (ddx: number, ddy: number) => {
+      setInputs((prev) => ({
+        ...prev,
+        dx_mm: toField((Number(prev.dx_mm) || 0) + ddx),
+        dy_mm: toField((Number(prev.dy_mm) || 0) + ddy),
+      }))
+    },
+  }
+
+  /** Llena el formulario con un caso abierto desde un archivo. */
+  function loadCase(c: LoadedCase) {
+    setMode(c.mode)
+    setStructureType(c.structure)
+    setInputs(c.inputs)
+    setFitMessage(null)
   }
 
   function loadArticleCase() {
@@ -169,9 +229,27 @@ export default function App() {
             </button>
           </div>
 
-          {FIELD_GROUPS.filter((g) => !g.sensorOnly || mode === 'sensor').map((group) => (
-            <div className="panel__section" key={group.title}>
-              <h2 className="panel__title">{group.title}</h2>
+          {FIELD_GROUPS.filter((g) => !g.sensorOnly || mode === 'sensor').map((group) => {
+            const keys: FieldKey[] = [...group.fields.map((f) => f.key), ...(group.select ? [group.select] : [])]
+            const errorCount = keys.filter((k) => errors[k]).length
+            return (
+            <details
+              className="panel__section group"
+              key={group.title}
+              open={openGroups[group.title] ?? false}
+              onToggle={(e) => {
+                const isOpen = e.currentTarget.open
+                setOpenGroups((prev) => ({ ...prev, [group.title]: isOpen }))
+              }}
+            >
+              <summary className="group__summary">
+                <h2 className="panel__title group__title">{group.title}</h2>
+                {errorCount > 0 && (
+                  <span className="group__badge">
+                    {errorCount === 1 ? '1 campo por corregir' : `${errorCount} campos por corregir`}
+                  </span>
+                )}
+              </summary>
               <div className="panel__fields">
                 {group.select === 'dielectric' && (
                   <SelectField
@@ -180,6 +258,15 @@ export default function App() {
                     options={DIELECTRICS}
                     error={errors.dielectric}
                     onChange={selectDielectric}
+                  />
+                )}
+                {group.select === 'monitor_fields' && (
+                  <SelectField
+                    label="Generar"
+                    value={inputs.monitor_fields}
+                    options={MONITOR_OPTIONS}
+                    error={errors.monitor_fields}
+                    onChange={(v) => update('monitor_fields', v)}
                   />
                 )}
                 {group.select === 'conductor' && (
@@ -191,7 +278,10 @@ export default function App() {
                     onChange={(v) => update('conductor', v)}
                   />
                 )}
-                {group.fields.map((f) => (
+                {group.fields
+                  // La frecuencia del monitor solo importa si se pide algún campo.
+                  .filter((f) => f.key !== 'monitor_freq_ghz' || inputs.monitor_fields !== 'none')
+                  .map((f) => (
                   <ParameterField
                     key={f.key}
                     label={f.label}
@@ -217,11 +307,25 @@ export default function App() {
                   ρ(θ) = (|cos(mθ/4)/a|<sup>n2</sup> + |sin(mθ/4)/b|<sup>n3</sup>)<sup>−1/n1</sup>
                 </p>
               )}
-            </div>
-          ))}
+              {group.title === 'Anillos concéntricos' && (
+                <div className="group__actions">
+                  <button type="button" className="button" onClick={fitStructure} disabled={!envelope}>
+                    Ajustar al sustrato
+                  </button>
+                  {fitMessage && (
+                    <p className="panel__note" role="status">
+                      {fitMessage}
+                    </p>
+                  )}
+                </div>
+              )}
+            </details>
+            )
+          })}
 
           <div className="panel__section">
             <h2 className="panel__title">Caso completo</h2>
+            <OpenCase onLoad={loadCase} />
             <CaseJson caseRequest={caseRequest} />
           </div>
         </section>
@@ -255,7 +359,17 @@ export default function App() {
           </div>
 
           {board ? (
-            <BoardPreview layers={board.layers} legend={board.legend} description={board.description} />
+            <BoardPreview
+              layers={board.layers}
+              legend={board.legend}
+              description={board.description}
+              frame={
+                view === 'structure'
+                  ? { width: Number(inputs.width_mm), length: Number(inputs.length_mm) }
+                  : undefined
+              }
+              onMove={view === 'structure' ? moveHandlers : undefined}
+            />
           ) : (
             <div className="board board--empty" role="status">
               <p>{error ?? 'Corrige los campos marcados en rojo para ver el diseño.'}</p>
@@ -315,6 +429,12 @@ export default function App() {
                 <dt>Tamaños usados</dt>
                 <dd>
                   {format(structure.rings.effective.size1)} y {format(structure.rings.effective.size2)}
+                </dd>
+              </div>
+              <div className="stats__item">
+                <dt>Tamaño del resonador</dt>
+                <dd>
+                  {format(structure.resonatorSize.width_mm, 2)} × {format(structure.resonatorSize.height_mm, 2)} mm
                 </dd>
               </div>
               <div className="stats__item">

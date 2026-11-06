@@ -22,5 +22,7 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-  "include": ["src"]
+  "include": ["src"],
+  // Las pruebas corren con Vitest en Node (leen archivos del backend); no son parte de la página.
+  "exclude": ["src/**/*.test.ts", "src/lib/testing.ts"]
 }

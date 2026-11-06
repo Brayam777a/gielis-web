@@ -20,6 +20,10 @@ export type Metal = { conductor: ConductorId; metal_thickness_mm: number }
 
 export type Frequency = { f_min_ghz: number; f_max_ghz: number }
 
+/** Monitores de campo, con las mismas opciones de la app: ninguno, E, o E y H. */
+export type MonitorFields = 'none' | 'E' | 'EH'
+export type Monitor = { monitor_fields: MonitorFields; monitor_freq_ghz: number }
+
 export type ExampleCase = {
   mode: Mode
   structure: StructureType
@@ -28,6 +32,7 @@ export type ExampleCase = {
   substrate: Substrate
   metal: Metal
   frequency: Frequency
+  monitor: Monitor
   /** Ancho de la línea microstrip; solo se usa en el sensor. */
   line_width_mm: number
 }
@@ -53,6 +58,7 @@ export const EXAMPLES: Record<Mode, ExampleCase> = {
     substrate: { dielectric: 'FR4_lossy', width_mm: 30, length_mm: 30, thickness_mm: 1.6, eps_r: 4.3, loss_tangent: 0.02 },
     metal: { conductor: 'Copper (annealed)', metal_thickness_mm: 0.035 },
     frequency: { f_min_ghz: 1, f_max_ghz: 8 },
+    monitor: { monitor_fields: 'none', monitor_freq_ghz: 4.5 },
     line_width_mm: 3,
   },
   transmitter: {
@@ -63,6 +69,7 @@ export const EXAMPLES: Record<Mode, ExampleCase> = {
     substrate: { dielectric: 'Rogers_RO4003C', width_mm: 30, length_mm: 30, thickness_mm: 1.524, eps_r: 3.55, loss_tangent: 0.0027 },
     metal: { conductor: 'PEC', metal_thickness_mm: 0.035 },
     frequency: { f_min_ghz: 1, f_max_ghz: 8 },
+    monitor: { monitor_fields: 'none', monitor_freq_ghz: 4.5 },
     line_width_mm: 3,
   },
   sensor: {
@@ -74,6 +81,7 @@ export const EXAMPLES: Record<Mode, ExampleCase> = {
     substrate: { dielectric: 'FR4_lossy', width_mm: 20, length_mm: 13, thickness_mm: 1.6, eps_r: 4.3, loss_tangent: 0.02 },
     metal: { conductor: 'Copper (annealed)', metal_thickness_mm: 0.035 },
     frequency: { f_min_ghz: 1, f_max_ghz: 8 },
+    monitor: { monitor_fields: 'none', monitor_freq_ghz: 4.5 },
     line_width_mm: 3,
   },
 }

@@ -102,6 +102,12 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | Revisión de qué funciones de `CST_MicrowaveStudio.m` usa la app | 16 funciones; solo `add_to_history` con un cubo está probado en Python (sección 7) |
 | 06/11/2026 | Revisión de la envolvente a raíz del comentario del profesor | Error encontrado y corregido: Python y TypeScript giraban el contorno 0.25° respecto a MATLAB (sección 4.3) |
 | 06/11/2026 | Medida de fidelidad con CST | La página dice si una figura se reproduce tal cual en CST, tiene partes internas que se pierden o puntas que se redondean |
+| 06/11/2026 | Valores de referencia regenerados tras la corrección del ángulo | **23 pruebas pasan** en Python 3.12. Las áreas no cambian (solo ruido en el último decimal); el centrado vertical del sensor pasa de 0.000002 mm a 0 y sus dos puentes quedan con la misma área |
+| 06/11/2026 | **Espacio de trabajo** (comentario del profesor) | Secciones plegables, placa encuadrada al sustrato con cotas W y L, botón *Ajustar al sustrato* y figura que se mueve con el mouse o las flechas |
+| 06/11/2026 | **Monitores de campo** en el formulario | Mismas opciones de la app (ninguno, E, o E y H) a una frecuencia dentro del barrido; van en el JSON del caso |
+| 06/11/2026 | **Abrir un caso desde un archivo JSON** | Lee el formato de la página y los archivos de `backend/examples/`; los casos se guardan y se vuelven a abrir idénticos |
+| 06/11/2026 | **Pruebas automáticas del front** (Vitest) | 41 pruebas de `gielis.ts`, `concentric.ts`, `design.ts` y `caseFile.ts` contra los valores de referencia de Python y los ejemplos; todas pasan |
+| 06/11/2026 | Se decide que la vista 3D sea la del modelo **simulado** en CST | Queda para cuando exista el backend; no se hace una reconstrucción propia |
 
 ---
 
@@ -379,6 +385,16 @@ Los errores se separan a propósito: un error en los materiales o las
 frecuencias no impide ver la estructura, y un error en los anillos no impide
 ver la curva. Lo único que exige todo correcto es el JSON.
 
+También tiene `fitToSubstrate(inputs, envolvente)`, el botón *Ajustar al
+sustrato*: busca el `Tamaño 1` más grande con el que el anillo exterior queda
+dentro del sustrato, con un margen del 5 % del lado menor (al menos 0.5 mm).
+Tiene en cuenta la rotación y el desplazamiento: para cada borde del sustrato
+calcula un límite (por ejemplo, `escala · xMáx + dx ≤ W/2 − margen`) y se queda
+con el menor. `Tamaño 2` se escala en la misma proporción. Si no hay forma de
+que quepa, devuelve `null` y la página explica por qué. El resultado también
+incluye el tamaño del resonador (ancho y alto de C1), que se muestra en los
+datos.
+
 Aquí también está `FIELD_GROUPS`, la lista de secciones y campos del
 formulario con su nombre, explicación y rango del deslizador. Para agregar un
 campo, se agrega una línea ahí. `sensorOnly` hace que la sección de la línea
@@ -386,8 +402,33 @@ solo aparezca en modo sensor, y `select` pone el selector de material antes de
 los campos.
 
 **`src/lib/examples.ts`** — Los valores completos de los tres casos del
-artículo: modo, estructura, Gielis, anillos, sustrato, metal, frecuencias y
-ancho de línea.
+artículo: modo, estructura, Gielis, anillos, sustrato, metal, frecuencias,
+monitores de campo (ninguno, en los tres) y ancho de línea.
+
+**Monitores de campo** (en `design.ts`). La app de MATLAB pregunta, después de
+simular, si se quieren generar campos: *ninguno*, *campo eléctrico* o *campos
+eléctrico y magnético*, a una frecuencia que debe estar dentro del barrido.
+En la web es una sección del formulario con esas mismas tres opciones; la
+frecuencia solo aparece si se pide algún campo, y se valida contra el barrido.
+En el JSON va como `field_monitors: { "fields": "E" | "EH", "freq_ghz": … }`, o
+`null` si no se piden.
+
+**`src/lib/caseFile.ts`** — `parseCaseFile(texto)` convierte un archivo en un
+caso para el formulario. Entiende dos formatos:
+
+| Formato | Cómo se reconoce | De dónde sale |
+| --- | --- | --- |
+| El de la página | Tiene `schema_version` (debe ser `"1.0"`) | Botones *Copiar* o *Descargar* del JSON |
+| El del artículo | Tiene `gielis_parameters` | `backend/examples/*_case_params.json` |
+
+Detalles del formato del artículo: el modo sale del texto de `case`
+("Absorber mode"…); los materiales se reconocen por nombre ("FR-4 (lossy)" →
+FR-4 con pérdidas); si el archivo trae dos estructuras, como el transmisor, se
+carga la primera y se avisa. Si εr y tanδ del archivo no coinciden con el
+material predefinido, se carga como *Personalizado* para no perder los valores
+del archivo, y también se avisa: pasa con el transmisor (tanδ 0.002 en el
+archivo, 0.0027 en la app). Si falta un dato, el error dice cuál
+(por ejemplo, `Falta la sección "concentric".`).
 
 **`src/components/ParameterField.tsx`** — Un parámetro: nombre, explicación,
 deslizador, campo numérico y mensaje de error. Los dos controles muestran el
@@ -405,6 +446,25 @@ mismo valor y llaman a la misma función `onChange`. Detalles:
 - Si hay error, el campo se marca en rojo y el mensaje queda asociado con
   `aria-describedby`.
 
+**`src/components/OpenCase.tsx`** — El botón *Abrir un caso (.json)* de la
+sección *Caso completo*. Usa un `<input type="file">` escondido detrás de una
+etiqueta con forma de botón; lee el archivo con `file.text()`, llama a
+`parseCaseFile` y muestra qué se cargó, los avisos o el error.
+
+**Pruebas del front** (`src/lib/*.test.ts`). Se corren con Vitest
+(`npm test`) y leen los archivos del backend con `src/lib/testing.ts`:
+
+| Archivo | Qué prueba |
+| --- | --- |
+| `gielis.test.ts` | `rat` de MATLAB, validación, curva y envolvente contra `golden/`, vértices en el centro del sector, fidelidad |
+| `concentric.test.ts` | C1–C4, anillos, placa complementaria, centrado, puentes y ranuras del sensor contra `golden/`; ajustes y errores |
+| `design.test.ts` | Área de cobre, JSON contra `examples/`, validaciones, monitores, *Ajustar al sustrato* |
+| `caseFile.test.ts` | Abrir los archivos del artículo, guardar y volver a abrir, archivos inválidos |
+
+Las pruebas no forman parte de la página: `tsconfig.app.json` las excluye de
+la compilación, porque usan funciones de Node (leer archivos) que el navegador
+no tiene.
+
 **`src/components/SelectField.tsx`** — Un selector de material con su etiqueta y
 su mensaje de error.
 
@@ -420,6 +480,14 @@ tipo (`substrate`, `copper`, `trace` o `curve`) y tiene uno o varios contornos.
 `trace` es el cobre de la cara de arriba (la línea del sensor): se dibuja
 translúcido para que se vean debajo las ranuras del plano de tierra.
 
+- **Encuadre al sustrato (`frame`):** en la vista *Estructura* la placa se
+  ajusta al tamaño real W × L, así que es cuadrada en el absorbente y
+  rectangular en el sensor (20 × 13 mm), y dibuja las cotas W y L con su
+  medida. En la vista *Curva* el encuadre es cuadrado.
+- **Mover la figura (`onMove`):** al arrastrar con el mouse se calcula cuántos
+  mm hay por píxel y el desplazamiento se convierte en `dx` y `dy`. Mientras se
+  arrastra, el encuadre queda fijo para que la figura no salte. También se mueve
+  con las flechas del teclado: 0.1 mm por toque, 1 mm con Shift.
 - **El truco de los huecos:** el cobre usa `fill-rule: evenodd`. Con esa regla,
   un contorno dentro de otro se ve como un hueco. Por eso basta con dibujar
   `C1, C2, C3, C4` en una sola capa para obtener dos anillos, y
@@ -452,6 +520,14 @@ translúcido para que se vean debajo las ranuras del plano de tierra.
   de 2.4 a 1.6…") y los datos: gap y tamaños usados, área de cobre, sustrato
   y barrido de frecuencias.
 - Al final del formulario está la sección *Caso completo* con el JSON.
+- **Secciones plegables:** cada grupo de campos es un `<details>` que se abre y
+  se cierra; al empezar solo están abiertas *Curva de Gielis* y *Anillos
+  concéntricos*. Si una sección cerrada tiene errores, su título lo avisa
+  ("1 campo por corregir"), para que no queden escondidos.
+- **Arrastre:** `dragOrigin` (un `useRef`) guarda `dx` y `dy` al empezar a
+  arrastrar, y cada movimiento les suma el desplazamiento total. Se usa
+  `useRef` y no estado porque ese valor no se dibuja: solo hay que recordarlo.
+  Los valores se redondean a centésimas de mm (`toField`).
 
 **`src/index.css`** — Colores, tipografía y estilos base. Los colores vienen
 del circuito impreso: verde de la máscara antisoldante (fondo de la placa),
@@ -483,13 +559,17 @@ la estructura en CST. Ejemplo del absorbente (resumido):
                  "thickness_mm": 1.6, "eps_r": 4.3, "loss_tangent": 0.02 },
   "metal": { "material": "Copper (annealed)", "thickness_mm": 0.035 },
   "transmission_line": null,
-  "frequency": { "min_ghz": 1, "max_ghz": 8 }
+  "frequency": { "min_ghz": 1, "max_ghz": 8 },
+  "field_monitors": null
 }
 ```
 
 - Los nombres son los mismos que usa el código de Python (`size1`, `gap_mm`…)
   y llevan la unidad en el nombre.
 - `transmission_line` solo tiene valor en el sensor: `{ "width_mm": 3 }`.
+- `field_monitors` es `null` si no se piden campos, o por ejemplo
+  `{ "fields": "EH", "freq_ghz": 2.43 }`.
+- Un caso guardado se puede volver a abrir con *Abrir un caso (.json)*.
 - `schema_version` permite cambiar el formato más adelante sin romper lo
   anterior.
 - Se puede copiar o descargar desde la sección *Caso completo*. Mientras no
@@ -534,6 +614,13 @@ npm run dev                     # abre http://localhost:5173
 La primera vez: `npm install`. Para revisar el código: `npm run lint` y
 `npm run build`.
 
+Pruebas del front (la primera vez hay que instalar Vitest con
+`npm install -D vitest`):
+
+```powershell
+npm test                        # esperado: 41 pruebas que pasan
+```
+
 ### Guardar cambios en GitHub
 
 ```powershell
@@ -564,6 +651,11 @@ git push
 | Puentes del sensor | Se calculan con el gap escrito por el usuario | Así lo hacen la app y el código de Python |
 | Materiales | Los mismos de la app; con un dieléctrico predefinido, εr y tanδ quedan bloqueados | Igual que la app |
 | tanδ del Rogers RO4003C | 0.0027, como la fija la app (el JSON del artículo dice 0.002) | Con la app se hicieron las simulaciones. **Pendiente confirmarlo** con los autores o el director |
+| Espacio de trabajo | Se interpretó el comentario del profesor como: más espacio para la figura, formulario plegable, placa a la escala del sustrato con cotas, ajuste automático y figura que se puede tomar y mover | **Confirmar con él** que era lo que pedía |
+| Margen de *Ajustar al sustrato* | 5 % del lado menor, al menos 0.5 mm | Deja la estructura visiblemente dentro, sin tocar el borde |
+| Monitores de campo | Se eligen en el formulario, antes de simular | La app los pide después de simular; en la web van en el JSON del caso para que el backend los agregue de una vez |
+| Abrir un caso con valores distintos al material predefinido | Se carga como *Personalizado* y se avisa | No perder los valores del archivo |
+| Vista 3D | Solo la del modelo simulado en CST | Lo que interesa ver en 3D es lo que se simuló; llega con el backend |
 | Unidades de frecuencia | Solo GHz | La app permite MHz, pero los tres casos usan GHz; menos opciones, menos errores |
 
 ---
@@ -574,8 +666,8 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
 
 **Geometría**
 
-- [ ] Regenerar los valores de referencia después de la corrección del ángulo:
-      `python tools/update_golden.py` y luego `python -m pytest`.
+- [x] Regenerar los valores de referencia después de la corrección del ángulo
+      (`python tools/update_golden.py`): hecho; 23 pruebas pasan.
 - [ ] Decidir con el profesor si, para figuras con partes internas, basta con
       el contorno exterior (como hace la app) o si se necesita otro método,
       como `getOriginalContourForCST`, que la app tiene pero no usa.
@@ -594,10 +686,22 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
       línea del sensor, con el JSON del caso.
 - [ ] Confirmar la tanδ del Rogers RO4003C (0.0027 en la app, 0.002 en el JSON
       del artículo).
-- [ ] Comentario del profesor: acomodar el espacio de trabajo y ajustar la
-      figura a las dimensiones.
-- [ ] Panel de resultados con las curvas de S-parámetros y la absorción.
-- [ ] Pulido: estados de carga, historial de simulaciones.
+- [x] Comentario del profesor: acomodar el espacio de trabajo y ajustar la
+      figura a las dimensiones. Falta que él confirme que es lo que pedía.
+- [x] Monitores de campo E y H a una frecuencia.
+- [x] Abrir un caso desde un archivo JSON.
+- [x] Pruebas automáticas del front (Vitest): 41 pruebas.
+
+Con esto está hecho todo lo del front que no necesita el backend.
+
+*Necesitan el backend (al principio, con datos de prueba):*
+
+- [ ] Botón *Simular*: enviar el JSON del caso y mostrar el estado (en cola,
+      construyendo, simulando, terminado, falló) con opción de cancelar.
+- [ ] Panel de resultados: curvas de S11, S21 y absorción, tabla de
+      resonancias y exportar los datos.
+- [ ] Historial de simulaciones.
+- [ ] Vista 3D del modelo que construyó y simuló CST (exportado como STL).
 
 **Backend**
 
@@ -643,6 +747,7 @@ etapa.
 | Avisos `LF will be replaced by CRLF` | Git convierte finales de línea entre Linux y Windows | Normal, se puede ignorar |
 | Proyecto lento o archivos bloqueados | El repo estaba dentro de OneDrive | Ya se movió a `C:\Users\USUARIO\reposs` |
 | La librería de CST no importa | Python 3.14 no es compatible con CST 2025 | Usar Python 3.12 |
+| `npm test` dice que no encuentra `vitest` | Vitest no está instalado | `npm install -D vitest` (una sola vez) |
 | `test_golden_geometry_regression` falla en el sensor | Los valores de referencia son de antes de la corrección del ángulo | `python tools/update_golden.py`, revisar el cambio con `git diff` y volver a correr `pytest` |
 
 ---

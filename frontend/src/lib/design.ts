@@ -13,7 +13,7 @@ import {
   type ConcentricParams,
   type ConcentricResult,
 } from './concentric.ts'
-import type { ExampleCase, Mode, StructureType } from './examples.ts'
+import type { ExampleCase, Mode, MonitorFields, StructureType } from './examples.ts'
 import {
   envelopeFidelity,
   generateCurve,
@@ -39,8 +39,9 @@ type NumericKey =
   | 'f_min_ghz'
   | 'f_max_ghz'
   | 'line_width_mm'
+  | 'monitor_freq_ghz'
 
-export type FieldKey = NumericKey | 'dielectric' | 'conductor'
+export type FieldKey = NumericKey | 'dielectric' | 'conductor' | 'monitor_fields'
 export type Inputs = Record<FieldKey, string>
 
 export type FieldConfig = {
@@ -55,8 +56,8 @@ export type FieldConfig = {
 
 export type FieldGroup = {
   title: string
-  /** Selector de material que va antes de los campos. */
-  select?: 'dielectric' | 'conductor'
+  /** Selector que va antes de los campos (material o tipo de monitor). */
+  select?: 'dielectric' | 'conductor' | 'monitor_fields'
   /** Solo se muestra en modo sensor. */
   sensorOnly?: boolean
   fields: FieldConfig[]
@@ -118,6 +119,19 @@ export const FIELD_GROUPS: FieldGroup[] = [
       { key: 'f_max_ghz', label: 'Máxima', hint: 'Fin del barrido, en GHz', min: 0.1, max: 50, step: 0.1 },
     ],
   },
+  {
+    title: 'Monitores de campo',
+    select: 'monitor_fields',
+    fields: [
+      { key: 'monitor_freq_ghz', label: 'Frecuencia', hint: 'Dentro del barrido, en GHz', min: 0.1, max: 50, step: 0.01 },
+    ],
+  },
+]
+
+export const MONITOR_OPTIONS: { id: MonitorFields; name: string }[] = [
+  { id: 'none', name: 'No generar campos' },
+  { id: 'E', name: 'Campo eléctrico (E)' },
+  { id: 'EH', name: 'Campos eléctrico y magnético (E y H)' },
 ]
 
 /** Convierte un caso de ejemplo en el texto de los campos. */
@@ -128,6 +142,7 @@ export function toInputs(ex: ExampleCase): Inputs {
     ...ex.substrate,
     ...ex.metal,
     ...ex.frequency,
+    ...ex.monitor,
     line_width_mm: ex.line_width_mm,
   }
   return Object.fromEntries(Object.entries(all).map(([k, v]) => [k, String(v)])) as Inputs
@@ -155,6 +170,8 @@ export type CaseRequest = {
   metal: { material: ConductorId; thickness_mm: number }
   transmission_line: { width_mm: number } | null
   frequency: { min_ghz: number; max_ghz: number }
+  /** Monitores de campo a una frecuencia; null si no se piden. */
+  field_monitors: { fields: 'E' | 'EH'; freq_ghz: number } | null
 }
 
 export type Structure = {
@@ -166,6 +183,8 @@ export type Structure = {
   /** Línea microstrip del sensor (cara superior); null en los otros modos. */
   line: Point[] | null
   copperArea: number
+  /** Ancho y alto del resonador (el contorno C1), en mm. */
+  resonatorSize: { width_mm: number; height_mm: number }
 }
 
 export type Analysis = {
@@ -239,6 +258,16 @@ export function analyzeDesign(inputs: Inputs, mode: Mode, structureType: Structu
   positive('f_min_ghz', 'La frecuencia mínima')
   if (Number.isNaN(fMax)) errors.f_max_ghz = 'Escribe un número.'
   else if (!errors.f_min_ghz && !(fMax > fMin)) errors.f_max_ghz = 'La frecuencia máxima debe superar la mínima.'
+
+  const monitorFields = inputs.monitor_fields as MonitorFields
+  const monitorFreq = num('monitor_freq_ghz')
+  if (!['none', 'E', 'EH'].includes(monitorFields)) errors.monitor_fields = 'Elige una opción.'
+  else if (monitorFields !== 'none') {
+    // Como la app: la frecuencia del monitor debe estar dentro del barrido.
+    if (Number.isNaN(monitorFreq)) errors.monitor_freq_ghz = 'Escribe un número.'
+    else if (!errors.f_min_ghz && !errors.f_max_ghz && (monitorFreq < fMin || monitorFreq > fMax))
+      errors.monitor_freq_ghz = `Debe estar dentro del barrido: ${fMin} a ${fMax} GHz.`
+  }
 
   const lineWidth = num('line_width_mm')
   if (mode === 'sensor') {
@@ -345,7 +374,13 @@ export function analyzeDesign(inputs: Inputs, mode: Mode, structureType: Structu
       copperArea = W * L - slots
     }
 
-    result.structure = { rings, bridges, substrate, line, copperArea }
+    const xs = rings.c1.map((p) => p[0])
+    const ys = rings.c1.map((p) => p[1])
+    const resonatorSize = {
+      width_mm: Math.max(...xs) - Math.min(...xs),
+      height_mm: Math.max(...ys) - Math.min(...ys),
+    }
+    result.structure = { rings, bridges, substrate, line, copperArea, resonatorSize }
   } catch (e) {
     result.error = (e as Error).message
     return result
@@ -370,7 +405,57 @@ export function analyzeDesign(inputs: Inputs, mode: Mode, structureType: Structu
       metal: { material: inputs.conductor as ConductorId, thickness_mm: num('metal_thickness_mm') },
       transmission_line: mode === 'sensor' ? { width_mm: lineWidth } : null,
       frequency: { min_ghz: fMin, max_ghz: fMax },
+      field_monitors: monitorFields === 'none' ? null : { fields: monitorFields, freq_ghz: monitorFreq },
     }
   }
   return result
+}
+
+/**
+ * "Ajustar al sustrato": calcula Tamaño 1 para que el anillo exterior quepa en
+ * el sustrato con un margen, respetando la rotación y el desplazamiento
+ * actuales. Tamaño 2 se escala en la misma proporción.
+ * Devuelve null si no hay forma de que quepa (por ejemplo, dx demasiado grande).
+ */
+export function fitToSubstrate(inputs: Inputs, envelope: Point[]): { size1: string; size2: string } | null {
+  const num = (k: NumericKey) => Number(inputs[k])
+  const W = num('width_mm')
+  const L = num('length_mm')
+  const size1 = num('size1')
+  const size2 = num('size2')
+  const dx = num('dx_mm') || 0
+  const dy = num('dy_mm') || 0
+  const t = ((num('rotation_deg') || 0) * Math.PI) / 180
+  if (!(W > 0 && L > 0 && size1 > 0 && size2 > 0)) return null
+
+  // El contorno base girado (escala 1): sus extremos en x e y.
+  let minX = Infinity
+  let maxX = -Infinity
+  let minY = Infinity
+  let maxY = -Infinity
+  for (const [x, y] of envelope) {
+    const rx = x * Math.cos(t) - y * Math.sin(t)
+    const ry = x * Math.sin(t) + y * Math.cos(t)
+    minX = Math.min(minX, rx)
+    maxX = Math.max(maxX, rx)
+    minY = Math.min(minY, ry)
+    maxY = Math.max(maxY, ry)
+  }
+
+  // Margen: 5 % del lado menor, al menos 0.5 mm.
+  const m = Math.max(0.5, 0.05 * Math.min(W, L))
+  // Cada borde da un límite para la escala: s·maxX + dx ≤ W/2 − m, etc.
+  const limits = [
+    (W / 2 - m - dx) / maxX,
+    (-W / 2 + m - dx) / minX,
+    (L / 2 - m - dy) / maxY,
+    (-L / 2 + m - dy) / minY,
+  ].filter((v) => Number.isFinite(v))
+  const s = Math.min(...limits)
+  if (!(s > 0.05)) return null
+
+  // Se redondea hacia abajo a 3 decimales para no pasarse del margen.
+  const s1 = Math.floor(s * 1000) / 1000
+  const s2 = Math.floor(((size2 * s1) / size1) * 1000) / 1000
+  return { size1: String(s1), size2: String(s2) }
 }

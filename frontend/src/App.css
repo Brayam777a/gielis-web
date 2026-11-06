@@ -36,7 +36,7 @@
 
 @media (min-width: 900px) {
   .app__main {
-    grid-template-columns: minmax(320px, 380px) 1fr;
+    grid-template-columns: minmax(300px, 360px) 1fr;
     align-items: start;
   }
 
@@ -257,7 +257,7 @@
   width: 100%;
   height: auto;
   aspect-ratio: 1;
-  max-height: calc(100vh - 240px);
+  max-height: calc(100vh - 200px);
   border-radius: 6px;
 }
 
@@ -344,6 +344,30 @@
 .board__legend--curve::before {
   height: 0;
   border-top: 1px dashed var(--silk);
+}
+
+.board__svg--movable {
+  cursor: grab;
+  touch-action: none;
+}
+
+.board__svg--movable:active {
+  cursor: grabbing;
+}
+
+.board__dims line {
+  stroke: var(--silk);
+  stroke-width: 1;
+  stroke-opacity: 0.8;
+}
+
+.board__dims text {
+  fill: var(--silk);
+  font-family: var(--font);
+}
+
+.board__hint {
+  opacity: 0.8;
 }
 
 .board__scale {
@@ -440,4 +464,99 @@
 .case-json__empty {
   color: var(--ink-soft);
   font-size: var(--step--1);
+}
+
+/* ---------- Secciones plegables del formulario ---------- */
+
+.group__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  cursor: pointer;
+  list-style: none;
+}
+
+.group__summary::-webkit-details-marker {
+  display: none;
+}
+
+/* Flecha que gira al abrir la sección */
+.group__summary::before {
+  content: '';
+  width: 0.5em;
+  height: 0.5em;
+  border-right: 2px solid var(--ink-soft);
+  border-bottom: 2px solid var(--ink-soft);
+  transform: translateY(-0.15em) rotate(-45deg);
+  transition: transform 0.15s;
+}
+
+.group[open] > .group__summary::before {
+  transform: translateY(-0.3em) rotate(45deg);
+}
+
+.group__title {
+  display: inline;
+  margin-bottom: 0;
+}
+
+.group[open] > .group__summary {
+  margin-bottom: 12px;
+}
+
+.group__badge {
+  color: var(--danger);
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.group__actions {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-top: 16px;
+}
+
+.button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+/* ---------- Abrir un caso ---------- */
+
+.open-case {
+  display: grid;
+  gap: 8px;
+  justify-items: start;
+  margin-bottom: 12px;
+}
+
+/* El campo de archivo real queda oculto; se usa la etiqueta como botón. */
+.open-case__input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.open-case__input:focus-visible + .button,
+.open-case label:has(+ .open-case__input:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+.open-case__message {
+  font-size: var(--step--1);
+  display: grid;
+  gap: 4px;
+}
+
+.open-case__message p {
+  margin: 0;
+}
+
+.open-case__message--error {
+  color: var(--danger);
 }

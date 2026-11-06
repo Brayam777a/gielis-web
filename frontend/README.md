@@ -17,6 +17,7 @@ npm run dev      # abre http://localhost:5173
 | --- | --- |
 | `npm run dev` | Servidor de desarrollo; recarga al guardar |
 | `npm run lint` | Revisa el código con ESLint |
+| `npm test` | Corre las pruebas (la primera vez: `npm install -D vitest`) |
 | `npm run build` | Revisa los tipos con TypeScript y genera la versión final en `dist/` |
 
 ## Archivos principales
@@ -31,9 +32,12 @@ src/
 |-- lib/design.ts               analyzeDesign: del formulario a la geometría; lista de campos
 |-- lib/examples.ts             Los tres casos del artículo
 |-- lib/materials.ts            Dieléctricos y conductores de la app
+|-- lib/caseFile.ts             Abrir un caso desde JSON (formato de la página o de examples/)
+|-- lib/*.test.ts               Pruebas (Vitest); lib/testing.ts lee los archivos del backend
 `-- components/
     |-- ParameterField.tsx      Un parámetro: deslizador + campo numérico + error
     |-- SelectField.tsx         Selector de material
     |-- CaseJson.tsx            El caso completo en JSON: ver, copiar, descargar
+    |-- OpenCase.tsx            Botón para abrir un caso (.json)
     `-- BoardPreview.tsx        La placa: dibuja las capas en SVG
 ```
