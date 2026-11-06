@@ -1,12 +1,25 @@
 import { useMemo } from 'react'
 import type { Point } from '../lib/gielis.ts'
 
+/**
+ * Una capa del dibujo. Cada capa puede tener varios contornos; con
+ * fill-rule "evenodd", un contorno dentro de otro se ve como un hueco.
+ * Así se dibuja un anillo (C1 con C2 adentro) o una placa con ranuras.
+ */
+export type Layer = {
+  id: string
+  kind: 'substrate' | 'copper' | 'curve'
+  contours: Point[][]
+  closed: boolean
+}
+
+export type LegendItem = { kind: Layer['kind']; label: string }
+
 type Props = {
-  /** Curva original de Gielis (8000 puntos). */
-  curve: Point[]
-  /** Envolvente radial: el contorno que irá a CST (720 puntos). */
-  envelope: Point[]
-  showCurve: boolean
+  layers: Layer[]
+  legend: LegendItem[]
+  /** Descripción para lectores de pantalla. */
+  description: string
 }
 
 /** Elige un paso de cuadrícula "redondo" (1, 2 o 5 × 10^k) para ~8 divisiones. */
@@ -18,14 +31,18 @@ function niceStep(span: number): number {
   return nice * power
 }
 
-function toPath(points: Point[], close: boolean): string {
-  if (points.length === 0) return ''
-  const [x0, y0] = points[0]
-  let d = `M${x0.toFixed(4)} ${y0.toFixed(4)}`
-  for (let i = 1; i < points.length; i++) {
-    d += `L${points[i][0].toFixed(4)} ${points[i][1].toFixed(4)}`
+/** Convierte contornos en el atributo "d" de un <path> de SVG. */
+function toPath(contours: Point[][], close: boolean): string {
+  let d = ''
+  for (const points of contours) {
+    if (points.length === 0) continue
+    d += `M${points[0][0].toFixed(4)} ${points[0][1].toFixed(4)}`
+    for (let i = 1; i < points.length; i++) {
+      d += `L${points[i][0].toFixed(4)} ${points[i][1].toFixed(4)}`
+    }
+    if (close) d += 'Z'
   }
-  return close ? `${d}Z` : d
+  return d
 }
 
 function formatMm(v: number): string {
@@ -33,17 +50,18 @@ function formatMm(v: number): string {
 }
 
 /**
- * Dibuja la forma como se vería en la placa: fondo verde de máscara
- * antisoldante, el contorno en cobre y una cuadrícula en milímetros.
+ * Dibuja la placa: fuera del sustrato, verde oscuro; el sustrato en verde;
+ * el cobre encima; una cuadrícula en milímetros.
  *
  * En SVG el eje y crece hacia abajo; por eso el grupo de la geometría usa
  * scale(1, -1): así la figura queda con el eje y hacia arriba, como en MATLAB.
  */
-export function BoardPreview({ curve, envelope, showCurve }: Props) {
+export function BoardPreview({ layers, legend, description }: Props) {
   const view = useMemo(() => {
     let extent = 0
-    for (const [x, y] of envelope) extent = Math.max(extent, Math.abs(x), Math.abs(y))
-    if (showCurve) for (const [x, y] of curve) extent = Math.max(extent, Math.abs(x), Math.abs(y))
+    for (const layer of layers)
+      for (const c of layer.contours)
+        for (const [x, y] of c) extent = Math.max(extent, Math.abs(x), Math.abs(y))
     extent = extent > 0 ? extent : 1
 
     const step = niceStep(extent * 2)
@@ -51,16 +69,11 @@ export function BoardPreview({ curve, envelope, showCurve }: Props) {
     const lines: number[] = []
     for (let v = -half; v <= half + step / 2; v += step) lines.push(Number(v.toFixed(10)))
 
-    return {
-      half,
-      step,
-      lines,
-      envelopePath: toPath(envelope, true),
-      curvePath: toPath(curve, false),
-    }
-  }, [curve, envelope, showCurve])
+    const paths = layers.map((l) => ({ ...l, d: toPath(l.contours, l.closed) }))
+    return { half, step, lines, paths }
+  }, [layers])
 
-  const { half, step, lines } = view
+  const { half, step, lines, paths } = view
   const size = half * 2
 
   return (
@@ -69,10 +82,15 @@ export function BoardPreview({ curve, envelope, showCurve }: Props) {
         className="board__svg"
         viewBox={`${-half} ${-half} ${size} ${size}`}
         role="img"
-        aria-label={`Contorno de la estructura; cada cuadro mide ${formatMm(step)} mm`}
+        aria-label={`${description}. Cada cuadro mide ${formatMm(step)} mm.`}
       >
-        <rect className="board__mask" x={-half} y={-half} width={size} height={size} />
+        <rect className="board__outside" x={-half} y={-half} width={size} height={size} />
         <g transform="scale(1,-1)">
+          {paths
+            .filter((p) => p.kind === 'substrate')
+            .map((p) => (
+              <path key={p.id} className="board__substrate" d={p.d} />
+            ))}
           {lines.map((v) => (
             <g key={v}>
               <line
@@ -93,15 +111,24 @@ export function BoardPreview({ curve, envelope, showCurve }: Props) {
               />
             </g>
           ))}
-          <path className="board__copper" d={view.envelopePath} vectorEffect="non-scaling-stroke" />
-          {showCurve && (
-            <path className="board__curve" d={view.curvePath} vectorEffect="non-scaling-stroke" />
-          )}
+          {paths
+            .filter((p) => p.kind !== 'substrate')
+            .map((p) => (
+              <path
+                key={p.id}
+                className={p.kind === 'copper' ? 'board__copper' : 'board__curve'}
+                d={p.d}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
         </g>
       </svg>
       <figcaption className="board__caption">
-        <span className="board__legend board__legend--copper">Contorno que irá a CST</span>
-        {showCurve && <span className="board__legend board__legend--curve">Curva original</span>}
+        {legend.map((item) => (
+          <span key={item.label} className={`board__legend board__legend--${item.kind}`}>
+            {item.label}
+          </span>
+        ))}
         <span className="board__scale">Cada cuadro mide {formatMm(step)} mm</span>
       </figcaption>
     </figure>

@@ -1,195 +1,266 @@
 import { useMemo, useState } from 'react'
 import './App.css'
-import { BoardPreview } from './components/BoardPreview.tsx'
+import { BoardPreview, type Layer, type LegendItem } from './components/BoardPreview.tsx'
 import { ParameterField } from './components/ParameterField.tsx'
-import { EXAMPLES } from './lib/examples.ts'
-import {
-  CURVE_SAMPLES,
-  ENVELOPE_BINS,
-  generateCurve,
-  polygonArea,
-  radialEnvelope,
-  validateParams,
-  type GielisParams,
-} from './lib/gielis.ts'
+import { analyzeDesign, FIELD_GROUPS, toInputs, type FieldKey, type Inputs } from './lib/design.ts'
+import { EXAMPLES, MODE_NAMES, type Mode, type StructureType } from './lib/examples.ts'
+import { CURVE_SAMPLES, ENVELOPE_BINS } from './lib/gielis.ts'
 
-type ParamKey = keyof GielisParams
+type View = 'structure' | 'curve'
 
-/** Lo que el usuario ve por cada parámetro: rango del deslizador y explicación. */
-const FIELDS: { key: ParamKey; hint: string; min: number; max: number; step: number }[] = [
-  { key: 'a', hint: 'Escala en la dirección del coseno', min: 0.1, max: 10, step: 0.1 },
-  { key: 'b', hint: 'Escala en la dirección del seno', min: 0.1, max: 10, step: 0.1 },
-  { key: 'm', hint: 'Simetría: cuántos lóbulos tiene la forma', min: 0.01, max: 20, step: 0.01 },
-  { key: 'n1', hint: 'Forma general: picos agudos o redondeados', min: 0.1, max: 20, step: 0.1 },
-  { key: 'n2', hint: 'Forma del término del coseno', min: -10, max: 20, step: 0.1 },
-  { key: 'n3', hint: 'Forma del término del seno', min: -10, max: 20, step: 0.1 },
-]
-
-/** Convierte los números de un caso a texto para los campos del formulario. */
-function toInputs(p: GielisParams): Record<ParamKey, string> {
-  return {
-    a: String(p.a),
-    b: String(p.b),
-    m: String(p.m),
-    n1: String(p.n1),
-    n2: String(p.n2),
-    n3: String(p.n3),
-  }
+const MODES: Mode[] = ['absorber', 'transmitter', 'sensor']
+const STRUCTURE_NAMES: Record<StructureType, string> = {
+  normal: 'Normal',
+  complementary: 'Complementaria',
 }
 
 function format(v: number, digits = 3): string {
   return v.toLocaleString('es-CO', { maximumFractionDigits: digits })
 }
 
-/**
- * Función pura: del texto de los campos a la geometría.
- * No depende de React, así que es fácil de leer y de probar.
- */
-function analyze(inputs: Record<ParamKey, string>) {
-  // Un campo vacío no es cero: lo marcamos como "escribe un número".
-  const num = (s: string) => (s.trim() === '' ? NaN : Number(s))
-  const params: GielisParams = {
-    a: num(inputs.a),
-    b: num(inputs.b),
-    m: num(inputs.m),
-    n1: num(inputs.n1),
-    n2: num(inputs.n2),
-    n3: num(inputs.n3),
-  }
-  const errors = validateParams(params)
-  if (Object.keys(errors).length > 0) {
-    return { params, errors, geometry: null, error: null }
-  }
-  try {
-    const curve = generateCurve(params)
-    const envelope = radialEnvelope(curve.points)
-    const geometry = { curve, envelope, area: polygonArea(envelope) }
-    return { params, errors, geometry, error: null }
-  } catch (e) {
-    return { params, errors, geometry: null, error: (e as Error).message }
-  }
-}
-
 export default function App() {
-  // El estado guarda el TEXTO de cada campo, no el número: así se puede
-  // escribir "-" o "1." sin que React lo borre mientras se escribe.
-  const [inputs, setInputs] = useState(() => toInputs(EXAMPLES[0].params))
+  // Estado: lo que el usuario puede cambiar.
+  // Los campos guardan TEXTO, no números: así se puede escribir "-" o "1."
+  // sin que React lo borre a medio escribir.
+  const [inputs, setInputs] = useState<Inputs>(() => toInputs(EXAMPLES.absorber))
+  const [mode, setMode] = useState<Mode>('absorber')
+  const [structureType, setStructureType] = useState<StructureType>('normal')
+  const [view, setView] = useState<View>('structure')
   const [showCurve, setShowCurve] = useState(true)
 
-  // useMemo guarda el resultado y solo vuelve a calcular cuando cambia
-  // `inputs`. Marcar o desmarcar la casilla no recalcula las 8000 muestras.
-  const { params, errors, geometry, error } = useMemo(() => analyze(inputs), [inputs])
+  // En modo sensor la estructura siempre es complementaria (como en la app).
+  const effectiveStructure: StructureType = mode === 'sensor' ? 'complementary' : structureType
 
-  const activeExample = EXAMPLES.find((ex) =>
-    (Object.keys(ex.params) as ParamKey[]).every((k) => ex.params[k] === params[k]),
+  // useMemo: recalcula solo si cambian los campos, el modo o la estructura.
+  // Cambiar de vista o marcar la casilla no repite el cálculo.
+  const analysis = useMemo(
+    () => analyzeDesign(inputs, mode, effectiveStructure),
+    [inputs, mode, effectiveStructure],
   )
+  const { errors, curve, envelope, structure, warnings, error } = analysis
 
-  function update(key: ParamKey, value: string) {
+  const isArticleCase =
+    effectiveStructure === EXAMPLES[mode].structure &&
+    JSON.stringify(inputs) === JSON.stringify(toInputs(EXAMPLES[mode]))
+
+  function update(key: FieldKey, value: string) {
     setInputs((prev) => ({ ...prev, [key]: value }))
   }
+
+  function loadArticleCase() {
+    setInputs(toInputs(EXAMPLES[mode]))
+    setStructureType(EXAMPLES[mode].structure)
+  }
+
+  // Qué se dibuja en la placa según la vista elegida.
+  const board = useMemo((): { layers: Layer[]; legend: LegendItem[]; description: string } | null => {
+    if (view === 'curve') {
+      if (!curve || !envelope) return null
+      const layers: Layer[] = [{ id: 'envelope', kind: 'copper', contours: [envelope], closed: true }]
+      const legend: LegendItem[] = [{ kind: 'copper', label: 'Contorno base que usa CST' }]
+      if (showCurve) {
+        layers.push({ id: 'curve', kind: 'curve', contours: [curve.points], closed: false })
+        legend.push({ kind: 'curve', label: 'Curva original' })
+      }
+      return { layers, legend, description: 'Curva de Gielis y su contorno base' }
+    }
+    if (!structure) return null
+    const { c1, c2, c3, c4 } = structure.rings
+    const substrate: Layer = { id: 'substrate', kind: 'substrate', contours: [structure.substrate], closed: true }
+    if (effectiveStructure === 'normal') {
+      return {
+        layers: [substrate, { id: 'rings', kind: 'copper', contours: [c1, c2, c3, c4], closed: true }],
+        legend: [
+          { kind: 'copper', label: 'Anillos de cobre' },
+          { kind: 'substrate', label: 'Sustrato' },
+        ],
+        description: 'Estructura normal: dos anillos de cobre sobre el sustrato',
+      }
+    }
+    const layers: Layer[] = [
+      substrate,
+      { id: 'plate', kind: 'copper', contours: [structure.substrate, c1, c2, c3, c4], closed: true },
+    ]
+    if (structure.bridges.length > 0) {
+      layers.push({ id: 'bridges', kind: 'copper', contours: structure.bridges, closed: true })
+    }
+    return {
+      layers,
+      legend: [
+        { kind: 'copper', label: mode === 'sensor' ? 'Plano de tierra' : 'Cobre' },
+        { kind: 'substrate', label: 'Ranuras' },
+      ],
+      description:
+        mode === 'sensor'
+          ? 'Sensor: plano de tierra con dos ranuras abiertas por puentes'
+          : 'Estructura complementaria: placa de cobre con dos ranuras',
+    }
+  }, [view, curve, envelope, showCurve, structure, effectiveStructure, mode])
 
   return (
     <div className="app">
       <header className="app__header">
         <h1 className="app__title">Gielis Web</h1>
-        <p className="app__subtitle">
-          Previsualización de la súperfórmula para estructuras microstrip
-        </p>
+        <p className="app__subtitle">Diseño de estructuras microstrip con la súperfórmula de Gielis</p>
       </header>
 
       <main className="app__main">
-        <section className="panel" aria-labelledby="params-title">
-          <h2 className="panel__title" id="params-title">
-            Parámetros de la curva
-          </h2>
-
-          <div className="examples" role="group" aria-label="Cargar un caso de ejemplo">
-            <span className="examples__label">Cargar caso</span>
-            {EXAMPLES.map((ex) => (
-              <button
-                key={ex.id}
-                type="button"
-                className="examples__button"
-                aria-pressed={activeExample?.id === ex.id}
-                onClick={() => setInputs(toInputs(ex.params))}
-              >
-                {ex.name}
-              </button>
-            ))}
+        <section className="panel" aria-label="Parámetros del diseño">
+          <div className="panel__section">
+            <h2 className="panel__title">Modo y estructura</h2>
+            <div className="segmented" role="group" aria-label="Modo">
+              {MODES.map((m) => (
+                <button
+                  key={m}
+                  type="button"
+                  className="segmented__button"
+                  aria-pressed={mode === m}
+                  onClick={() => setMode(m)}
+                >
+                  {MODE_NAMES[m]}
+                </button>
+              ))}
+            </div>
+            <div className="segmented" role="group" aria-label="Tipo de estructura">
+              {(['normal', 'complementary'] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  className="segmented__button"
+                  aria-pressed={effectiveStructure === s}
+                  disabled={mode === 'sensor'}
+                  onClick={() => setStructureType(s)}
+                >
+                  {STRUCTURE_NAMES[s]}
+                </button>
+              ))}
+            </div>
+            {mode === 'sensor' && (
+              <p className="panel__note">En modo sensor la estructura siempre es complementaria.</p>
+            )}
+            <button type="button" className="link-button" onClick={loadArticleCase} disabled={isArticleCase}>
+              {isArticleCase
+                ? `Valores del artículo para ${MODE_NAMES[mode].toLowerCase()} cargados`
+                : `Cargar los valores del artículo para ${MODE_NAMES[mode].toLowerCase()}`}
+            </button>
           </div>
 
-          <div className="panel__fields">
-            {FIELDS.map((f) => (
-              <ParameterField
-                key={f.key}
-                symbol={f.key}
-                hint={f.hint}
-                value={inputs[f.key]}
-                min={f.min}
-                max={f.max}
-                step={f.step}
-                error={errors[f.key]}
-                onChange={(v) => update(f.key, v)}
-              />
-            ))}
-          </div>
-
-          <p className="formula" aria-label="Fórmula de Gielis">
-            ρ(θ) = (|cos(mθ/4)/a|<sup>n2</sup> + |sin(mθ/4)/b|<sup>n3</sup>)<sup>−1/n1</sup>
-          </p>
+          {FIELD_GROUPS.map((group) => (
+            <div className="panel__section" key={group.title}>
+              <h2 className="panel__title">{group.title}</h2>
+              <div className="panel__fields">
+                {group.fields.map((f) => (
+                  <ParameterField
+                    key={f.key}
+                    label={f.label}
+                    math={f.math}
+                    hint={f.hint}
+                    value={inputs[f.key]}
+                    min={f.min}
+                    max={f.max}
+                    step={f.step}
+                    error={errors[f.key]}
+                    onChange={(v) => update(f.key, v)}
+                  />
+                ))}
+              </div>
+              {group.title === 'Curva de Gielis' && (
+                <p className="formula" aria-label="Fórmula de Gielis">
+                  ρ(θ) = (|cos(mθ/4)/a|<sup>n2</sup> + |sin(mθ/4)/b|<sup>n3</sup>)<sup>−1/n1</sup>
+                </p>
+              )}
+            </div>
+          ))}
         </section>
 
-        <section className="preview" aria-labelledby="preview-title">
+        <section className="preview" aria-label="Vista previa">
           <div className="preview__head">
-            <h2 className="preview__title" id="preview-title">
-              {activeExample ? `Forma del caso ${activeExample.name.toLowerCase()}` : 'Forma personalizada'}
-            </h2>
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={showCurve}
-                onChange={(e) => setShowCurve(e.target.checked)}
-              />
-              Mostrar la curva original
-            </label>
+            <div className="segmented" role="group" aria-label="Qué mostrar">
+              <button
+                type="button"
+                className="segmented__button"
+                aria-pressed={view === 'structure'}
+                onClick={() => setView('structure')}
+              >
+                Estructura
+              </button>
+              <button
+                type="button"
+                className="segmented__button"
+                aria-pressed={view === 'curve'}
+                onClick={() => setView('curve')}
+              >
+                Curva
+              </button>
+            </div>
+            {view === 'curve' && (
+              <label className="toggle">
+                <input type="checkbox" checked={showCurve} onChange={(e) => setShowCurve(e.target.checked)} />
+                Mostrar la curva original
+              </label>
+            )}
           </div>
 
-          {geometry ? (
-            <>
-              <BoardPreview
-                curve={geometry.curve.points}
-                envelope={geometry.envelope}
-                showCurve={showCurve}
-              />
-              <dl className="stats">
-                <div className="stats__item">
-                  <dt>Periodo de θ</dt>
-                  <dd>0 a {geometry.curve.u}π</dd>
-                </div>
-                <div className="stats__item">
-                  <dt>Radio mínimo y máximo</dt>
-                  <dd>
-                    {format(geometry.curve.rhoMin)} a {format(geometry.curve.rhoMax)} mm
-                  </dd>
-                </div>
-                <div className="stats__item">
-                  <dt>Área del contorno</dt>
-                  <dd>{format(geometry.area, 2)} mm²</dd>
-                </div>
-                <div className="stats__item">
-                  <dt>Puntos</dt>
-                  <dd>
-                    {format(CURVE_SAMPLES, 0)} en la curva, {ENVELOPE_BINS} en el contorno
-                  </dd>
-                </div>
-              </dl>
-            </>
+          {board ? (
+            <BoardPreview layers={board.layers} legend={board.legend} description={board.description} />
           ) : (
             <div className="board board--empty" role="status">
-              <p>
-                {error ?? 'Corrige los parámetros marcados en rojo para ver la forma.'}
-              </p>
+              <p>{error ?? 'Corrige los campos marcados en rojo para ver el diseño.'}</p>
             </div>
+          )}
+
+          {warnings.length > 0 && view === 'structure' && (
+            <ul className="notice" role="status">
+              {warnings.map((w) => (
+                <li key={w}>{w}</li>
+              ))}
+            </ul>
+          )}
+
+          {view === 'curve' && curve && envelope && (
+            <dl className="stats">
+              <div className="stats__item">
+                <dt>Periodo de θ</dt>
+                <dd>0 a {curve.u}π</dd>
+              </div>
+              <div className="stats__item">
+                <dt>Radio mínimo y máximo</dt>
+                <dd>
+                  {format(curve.rhoMin)} a {format(curve.rhoMax)} mm
+                </dd>
+              </div>
+              <div className="stats__item">
+                <dt>Puntos</dt>
+                <dd>
+                  {format(CURVE_SAMPLES, 0)} en la curva, {ENVELOPE_BINS} en el contorno
+                </dd>
+              </div>
+            </dl>
+          )}
+
+          {view === 'structure' && structure && (
+            <dl className="stats">
+              <div className="stats__item">
+                <dt>Gap usado</dt>
+                <dd>{format(structure.rings.effective.gap_mm)} mm</dd>
+              </div>
+              <div className="stats__item">
+                <dt>Tamaños usados</dt>
+                <dd>
+                  {format(structure.rings.effective.size1)} y {format(structure.rings.effective.size2)}
+                </dd>
+              </div>
+              <div className="stats__item">
+                <dt>Área de cobre</dt>
+                <dd>{format(structure.copperArea, 2)} mm²</dd>
+              </div>
+              <div className="stats__item">
+                <dt>Sustrato</dt>
+                <dd>
+                  {format(Number(inputs.width_mm))} × {format(Number(inputs.length_mm))} mm
+                </dd>
+              </div>
+            </dl>
           )}
         </section>
       </main>

@@ -25,10 +25,22 @@
   gap: 24px;
 }
 
+/* En el celular la placa va primero; en pantallas anchas queda fija a la
+   derecha mientras se recorren los controles. */
+.preview {
+  order: -1;
+}
+
 @media (min-width: 900px) {
   .app__main {
     grid-template-columns: minmax(320px, 380px) 1fr;
     align-items: start;
+  }
+
+  .preview {
+    order: 0;
+    position: sticky;
+    top: 16px;
   }
 }
 
@@ -41,48 +53,95 @@
   padding: 20px;
 }
 
-.panel__title,
-.preview__title {
+.panel__section + .panel__section {
+  margin-top: 24px;
+  padding-top: 20px;
+  border-top: 1px solid var(--line);
+}
+
+.panel__title {
   font-size: var(--step-1);
   font-weight: 600;
+  margin-bottom: 12px;
 }
 
 .panel__fields {
   display: grid;
   gap: 16px;
-  margin-top: 20px;
 }
 
-.examples {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-  margin-top: 12px;
-}
-
-.examples__label {
-  flex-basis: 100%;
+.panel__note {
   color: var(--ink-soft);
   font-size: var(--step--1);
+  margin-top: 8px;
 }
 
-.examples__button {
+.link-button {
+  display: block;
+  margin-top: 12px;
+  text-align: left;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--mask);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.link-button:disabled {
+  color: var(--ink-soft);
+  text-decoration: none;
+  cursor: default;
+}
+
+@media (prefers-color-scheme: dark) {
+  .link-button {
+    color: var(--copper-light);
+  }
+}
+
+.segmented {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  padding: 3px;
   border: 1px solid var(--line);
+  border-radius: calc(var(--radius-control) + 3px);
+}
+
+.segmented + .segmented {
+  margin-left: 8px;
+}
+
+.panel .segmented + .segmented {
+  margin: 8px 0 0;
+}
+
+.segmented__button {
+  border: 0;
   background: transparent;
   border-radius: var(--radius-control);
   padding: 4px 12px;
   cursor: pointer;
 }
 
-.examples__button:hover {
-  border-color: var(--mask);
+.segmented__button:hover:not(:disabled):not([aria-pressed='true']) {
+  background: var(--paper);
 }
 
-.examples__button[aria-pressed='true'] {
+.segmented__button[aria-pressed='true'] {
   background: var(--mask);
-  border-color: var(--mask);
   color: var(--silk);
+}
+
+.segmented__button:disabled {
+  cursor: not-allowed;
+}
+
+.segmented__button:disabled:not([aria-pressed='true']) {
+  color: var(--ink-soft);
+  opacity: 0.6;
 }
 
 /* ---------- Un parámetro ---------- */
@@ -94,8 +153,12 @@
   margin-bottom: 4px;
 }
 
-.param__symbol {
+.param__name {
   font-weight: 700;
+  white-space: nowrap;
+}
+
+.param__name--math {
   font-style: italic;
   min-width: 1.6em;
 }
@@ -143,9 +206,7 @@
 }
 
 .formula {
-  margin-top: 24px;
-  padding-top: 16px;
-  border-top: 1px solid var(--line);
+  margin-top: 16px;
   color: var(--ink-soft);
   font-size: var(--step--1);
   font-style: italic;
@@ -190,11 +251,15 @@
   width: 100%;
   height: auto;
   aspect-ratio: 1;
-  max-height: 70vh;
+  max-height: calc(100vh - 240px);
   border-radius: 6px;
 }
 
-.board__mask {
+.board__outside {
+  fill: var(--mask-deep);
+}
+
+.board__substrate {
   fill: var(--mask);
 }
 
@@ -212,6 +277,7 @@
 
 .board__copper {
   fill: var(--copper);
+  fill-rule: evenodd;
   stroke: var(--copper-light);
   stroke-width: 1.5;
   stroke-linejoin: round;
@@ -248,6 +314,12 @@
   background: var(--copper);
 }
 
+.board__legend--substrate::before {
+  background: var(--mask);
+  outline: 1px solid var(--silk);
+  outline-offset: -1px;
+}
+
 .board__legend--curve::before {
   height: 0;
   border-top: 1px dashed var(--silk);
@@ -268,6 +340,15 @@
 }
 
 /* ---------- Datos de la curva ---------- */
+
+.notice {
+  margin: 12px 0 0;
+  padding: 10px 14px 10px 30px;
+  border: 1px solid var(--copper);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: var(--step--1);
+}
 
 .stats {
   display: grid;

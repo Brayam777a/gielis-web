@@ -24,11 +24,13 @@ npm run dev      # abre http://localhost:5173
 ```text
 src/
 |-- main.tsx                    Punto de entrada: monta <App /> en la página
-|-- App.tsx                     Pantalla principal: estado, cálculo y distribución
+|-- App.tsx                     Pantalla principal: estado, vistas y capas del dibujo
 |-- App.css / index.css         Estilos (index.css tiene los colores y la tipografía)
-|-- lib/gielis.ts               Matemática: súperfórmula, rat de MATLAB, envolvente
-|-- lib/examples.ts             Los tres casos de ejemplo
+|-- lib/gielis.ts               Súperfórmula, rat de MATLAB, envolvente radial
+|-- lib/concentric.ts           Anillos C1–C4, centrado y puentes del sensor
+|-- lib/design.ts               analyzeDesign: del formulario a la geometría; lista de campos
+|-- lib/examples.ts             Los tres casos del artículo
 `-- components/
     |-- ParameterField.tsx      Un parámetro: deslizador + campo numérico + error
-    `-- BoardPreview.tsx        La placa: dibuja el contorno en SVG
+    `-- BoardPreview.tsx        La placa: dibuja las capas en SVG
 ```

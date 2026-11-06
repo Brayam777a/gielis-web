@@ -1,8 +1,10 @@
 import { useId } from 'react'
 
 type Props = {
-  /** Nombre corto del parámetro, como aparece en la fórmula (a, b, m…). */
-  symbol: string
+  /** Nombre corto del parámetro: "a", "m", "gap", "Tamaño 1"… */
+  label: string
+  /** true si el nombre es un símbolo matemático (se escribe en cursiva). */
+  math?: boolean
   /** Qué controla el parámetro, en palabras. */
   hint: string
   /** Texto tal como lo escribió el usuario (puede estar a medio escribir: "-", "1."). */
@@ -15,10 +17,10 @@ type Props = {
 }
 
 /**
- * Un parámetro de la súperfórmula: deslizador para explorar rápido y campo
- * numérico para escribir el valor exacto. Los dos muestran el mismo valor.
+ * Un parámetro: deslizador para explorar rápido y campo numérico para
+ * escribir el valor exacto. Los dos muestran el mismo valor.
  */
-export function ParameterField({ symbol, hint, value, min, max, step, error, onChange }: Props) {
+export function ParameterField({ label, math = false, hint, value, min, max, step, error, onChange }: Props) {
   const id = useId()
   const errorId = `${id}-error`
   const numeric = Number(value)
@@ -28,7 +30,7 @@ export function ParameterField({ symbol, hint, value, min, max, step, error, onC
   return (
     <div className={error ? 'param param--invalid' : 'param'}>
       <label className="param__label" htmlFor={id}>
-        <span className="param__symbol">{symbol}</span>
+        <span className={math ? 'param__name param__name--math' : 'param__name'}>{label}</span>
         <span className="param__hint">{hint}</span>
       </label>
       <div className="param__inputs">
@@ -39,7 +41,7 @@ export function ParameterField({ symbol, hint, value, min, max, step, error, onC
           max={max}
           step={step}
           value={sliderValue}
-          aria-label={`${symbol}: ${hint}`}
+          aria-label={`${label}: ${hint}`}
           onChange={(e) => onChange(e.target.value)}
         />
         <input
