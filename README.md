@@ -11,7 +11,7 @@ gielis-web/
 |-- backend/    Python: geometría (GielisGeometryService) y, después, API FastAPI + CST
 |-- frontend/   React + TypeScript (Vite)
 `-- docs/
-    `-- CONTRATO.md   JSON que intercambian front y backend
+    `-- DOCUMENTACION.md   Qué hemos hecho, qué falta y cómo funciona cada parte
 ```
 
 ## Requisitos
@@ -30,10 +30,13 @@ py -3.12 -m venv .venv
 python -m pip install -e ".[test]"
 python -m pytest
 
-# frontend (ver frontend/README.md)
+# frontend
+cd ..\frontend
+npm install
+npm run dev
 ```
 
 ## Reglas de trabajo
 
-- Un cambio en el JSON se acuerda primero en `docs/CONTRATO.md`.
+- Lee primero `docs/DOCUMENTACION.md`: explica cada parte del proyecto.
 - Commits pequeños, uno por tarea.

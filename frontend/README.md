@@ -1,75 +1,34 @@
-# React + TypeScript + Vite
+# Frontend: Gielis Web (React + TypeScript + Vite)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Previsualización en vivo de la súperfórmula de Gielis. La explicación completa
+de cada archivo está en [`docs/DOCUMENTACION.md`](../docs/DOCUMENTACION.md).
 
-Currently, two official plugins are available:
+## Ejecutar
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
-
-## React Compiler
-
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
-
-## Expanding the ESLint configuration
-
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-
+```powershell
+cd frontend
+npm install      # solo la primera vez o si cambia package.json
+npm run dev      # abre http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://npmx.dev/package/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://npmx.dev/package/eslint-plugin-react-dom) for React-specific lint rules:
+## Comandos útiles
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+| Comando | Para qué |
+| --- | --- |
+| `npm run dev` | Servidor de desarrollo; recarga al guardar |
+| `npm run lint` | Revisa el código con ESLint |
+| `npm run build` | Revisa los tipos con TypeScript y genera la versión final en `dist/` |
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Archivos principales
 
+```text
+src/
+|-- main.tsx                    Punto de entrada: monta <App /> en la página
+|-- App.tsx                     Pantalla principal: estado, cálculo y distribución
+|-- App.css / index.css         Estilos (index.css tiene los colores y la tipografía)
+|-- lib/gielis.ts               Matemática: súperfórmula, rat de MATLAB, envolvente
+|-- lib/examples.ts             Los tres casos de ejemplo
+`-- components/
+    |-- ParameterField.tsx      Un parámetro: deslizador + campo numérico + error
+    `-- BoardPreview.tsx        La placa: dibuja el contorno en SVG
 ```
