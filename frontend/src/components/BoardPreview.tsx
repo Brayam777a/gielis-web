@@ -8,7 +8,8 @@ import type { Point } from '../lib/gielis.ts'
  */
 export type Layer = {
   id: string
-  kind: 'substrate' | 'copper' | 'curve'
+  /** trace = cobre de la cara superior (la línea del sensor), dibujado translúcido. */
+  kind: 'substrate' | 'copper' | 'trace' | 'curve'
   contours: Point[][]
   closed: boolean
 }
@@ -116,7 +117,7 @@ export function BoardPreview({ layers, legend, description }: Props) {
             .map((p) => (
               <path
                 key={p.id}
-                className={p.kind === 'copper' ? 'board__copper' : 'board__curve'}
+                className={`board__${p.kind}`}
                 d={p.d}
                 vectorEffect="non-scaling-stroke"
               />

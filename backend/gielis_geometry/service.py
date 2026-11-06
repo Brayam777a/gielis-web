@@ -220,7 +220,11 @@ class GielisGeometryService:
         r_filled = self._circular_interp_missing(rmax)
         r_smooth = self._circular_mean_filter(r_filled, smooth)
 
-        theta = np.linspace(0.0, 2.0 * pi, n_ang, endpoint=False)
+        # MATLAB (getRadialOuterEnvelope) places each vertex at the CENTER of
+        # its angular bin: phiGrid = 0.5*(edges(1:end-1) + edges(2:end)).
+        # Using the bin start instead rotates the whole contour by half a bin
+        # (0.25 deg with 720 bins); areas stay the same but coordinates do not.
+        theta = 0.5 * (edges[:-1] + edges[1:])
         xe = r_smooth * np.cos(theta)
         ye = r_smooth * np.sin(theta)
 

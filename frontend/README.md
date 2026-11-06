@@ -30,7 +30,10 @@ src/
 |-- lib/concentric.ts           Anillos C1–C4, centrado y puentes del sensor
 |-- lib/design.ts               analyzeDesign: del formulario a la geometría; lista de campos
 |-- lib/examples.ts             Los tres casos del artículo
+|-- lib/materials.ts            Dieléctricos y conductores de la app
 `-- components/
     |-- ParameterField.tsx      Un parámetro: deslizador + campo numérico + error
+    |-- SelectField.tsx         Selector de material
+    |-- CaseJson.tsx            El caso completo en JSON: ver, copiar, descargar
     `-- BoardPreview.tsx        La placa: dibuja las capas en SVG
 ```

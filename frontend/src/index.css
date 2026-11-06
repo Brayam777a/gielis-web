@@ -20,6 +20,9 @@
   --silk: #e8e6d9;
   --danger: #b3261e;
   --focus: #2f6fd0;
+  /* Color de deslizadores y enlaces: verde en claro, cobre en oscuro. */
+  --control: var(--mask);
+  --link: var(--mask);
 
   --font: 'Atkinson Hyperlegible Next', system-ui, sans-serif;
   --step--1: 0.875rem;
@@ -41,6 +44,8 @@
     --line: #34413a;
     --danger: #f2827a;
     --focus: #7aa7ff;
+    --control: var(--copper);
+    --link: var(--copper-light);
     color-scheme: dark;
   }
 }

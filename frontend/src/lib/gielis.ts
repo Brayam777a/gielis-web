@@ -147,11 +147,23 @@ function interp(x: number, xs: number[], ys: number[]): number {
   return ys[j - 1] + ((ys[j] - ys[j - 1]) * (x - x0)) / (x1 - x0)
 }
 
+export type EnvelopeDetail = {
+  /** Los 720 vértices del contorno que va a CST. */
+  points: Point[]
+  /** Ángulo del centro de cada sector (rad). */
+  angles: number[]
+  /** Radio después de rellenar sectores vacíos (antes de suavizar). */
+  filled: number[]
+  /** Radio final, ya suavizado. */
+  smooth: number[]
+}
+
 /**
  * Envolvente radial exterior, como getRadialOuterEnvelope de la app:
  *   1. Divide el círculo en 720 sectores y guarda el radio máximo de cada uno.
  *   2. Rellena los sectores vacíos interpolando de forma circular.
  *   3. Suaviza con un promedio móvil circular de 5 sectores.
+ *   4. Pone cada vértice en el CENTRO de su sector (phiGrid en MATLAB).
  * El resultado es un polígono simple (sin cruces) que CST sí puede extruir.
  */
 export function radialEnvelope(
@@ -159,6 +171,14 @@ export function radialEnvelope(
   bins = ENVELOPE_BINS,
   smoothing = ENVELOPE_SMOOTHING,
 ): Point[] {
+  return radialEnvelopeDetail(points, bins, smoothing).points
+}
+
+export function radialEnvelopeDetail(
+  points: Point[],
+  bins = ENVELOPE_BINS,
+  smoothing = ENVELOPE_SMOOTHING,
+): EnvelopeDetail {
   const TWO_PI = 2 * Math.PI
   const edges = Array.from({ length: bins + 1 }, (_, k) =>
     k === bins ? TWO_PI : (k * TWO_PI) / bins,
@@ -192,10 +212,82 @@ export function radialEnvelope(
     return sum / w
   })
 
-  return smooth.map((r, k) => {
-    const theta = (k * TWO_PI) / bins
-    return [r * Math.cos(theta), r * Math.sin(theta)]
-  })
+  // 4. MATLAB: phiGrid = 0.5*(edges(1:end-1) + edges(2:end)), el centro de cada sector.
+  //    Usar el borde del sector giraría todo el contorno medio sector (0.25°).
+  const angles = smooth.map((_, k) => 0.5 * (edges[k] + edges[k + 1]))
+  const envelope = smooth.map((r, k): Point => [r * Math.cos(angles[k]), r * Math.sin(angles[k])])
+  return { points: envelope, angles, filled, smooth }
+}
+
+export type Fidelity = {
+  /** Porcentaje de direcciones (sectores) donde la curva tiene partes internas. */
+  innerDirectionsPct: number
+  /** Cuánto se meten hacia adentro esas partes, como máximo (mm). */
+  maxInnerDepthMm: number
+  /** Cuánto cambia el radio por el suavizado, como máximo (mm). */
+  maxSmoothingMm: number
+}
+
+/**
+ * ¿Qué tanto de la curva original se pierde al pasar a la envolvente?
+ *
+ * La envolvente guarda UN radio por dirección (el más lejano). Si un rayo que
+ * sale del centro corta la curva en varios radios distintos, la curva tiene
+ * partes internas (lazos, pétalos que se cruzan) que CST no recibe.
+ * Aquí se cuentan esos cortes en el centro de cada uno de los 720 sectores.
+ */
+export function envelopeFidelity(curve: Point[], detail: EnvelopeDetail): Fidelity {
+  const n = detail.angles.length
+  const step = (2 * Math.PI) / n
+  const minR = new Array<number>(n).fill(Infinity)
+  const maxR = new Array<number>(n).fill(-Infinity)
+
+  for (let i = 0; i < curve.length; i++) {
+    const p = curve[i]
+    const q = curve[(i + 1) % curve.length]
+    const a = Math.atan2(p[1], p[0])
+    let d = Math.atan2(q[1], q[0]) - a
+    if (d > Math.PI) d -= 2 * Math.PI
+    if (d <= -Math.PI) d += 2 * Math.PI
+    // Un tramo que pasa por el centro no tiene una dirección clara: se omite.
+    if (Math.abs(d) < 1e-12 || Math.abs(d) > Math.PI - 1e-6) continue
+    const lo = Math.min(a, a + d)
+    const hi = Math.max(a, a + d)
+    // Centros de sector c_k = (k + 0.5)·step dentro de [lo, hi).
+    for (let k = Math.ceil(lo / step - 0.5); (k + 0.5) * step < hi; k++) {
+      const c = (k + 0.5) * step
+      const ux = Math.cos(c)
+      const uy = Math.sin(c)
+      // Corte del rayo con el tramo p→q.
+      const den = (p[0] - q[0]) * uy - (p[1] - q[1]) * ux
+      if (Math.abs(den) < 1e-15) continue
+      const t = (p[0] * uy - p[1] * ux) / den
+      if (t < 0 || t > 1) continue
+      const r = (p[0] + t * (q[0] - p[0])) * ux + (p[1] + t * (q[1] - p[1])) * uy
+      if (r <= 0) continue
+      const kk = ((k % n) + n) % n
+      minR[kk] = Math.min(minR[kk], r)
+      maxR[kk] = Math.max(maxR[kk], r)
+    }
+  }
+
+  const rOuter = Math.max(...detail.smooth)
+  const tol = Math.max(1e-3, 0.005 * rOuter) // 0.5 % del radio, o 1 µm
+  let inner = 0
+  let maxDepth = 0
+  for (let k = 0; k < n; k++) {
+    if (!Number.isFinite(minR[k])) continue
+    const depth = maxR[k] - minR[k]
+    if (depth > tol) {
+      inner++
+      maxDepth = Math.max(maxDepth, depth)
+    }
+  }
+  let maxSmoothing = 0
+  for (let k = 0; k < n; k++) {
+    maxSmoothing = Math.max(maxSmoothing, Math.abs(detail.smooth[k] - detail.filled[k]))
+  }
+  return { innerDirectionsPct: (100 * inner) / n, maxInnerDepthMm: maxDepth, maxSmoothingMm: maxSmoothing }
 }
 
 /** Área de un polígono con la fórmula del zapato (shoelace), en mm². */

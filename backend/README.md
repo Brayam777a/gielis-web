@@ -23,6 +23,15 @@ Los tests leen los casos de `examples/`. Los valores de `golden/` los generó el
 propio código Python: prueban que nada cambie sin querer (regresión), **no**
 que Python sea igual a MATLAB.
 
+Después de un cambio **intencional** de la geometría, regenéralos y revisa el
+cambio antes de hacer commit:
+
+```bash
+python tools/update_golden.py
+git diff golden/golden_cases.json
+python -m pytest
+```
+
 ## Comparar con la app MATLAB real (pendiente)
 
 Esta es la prueba que demuestra que Python = app.

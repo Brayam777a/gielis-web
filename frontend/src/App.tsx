@@ -1,10 +1,13 @@
 import { useMemo, useState } from 'react'
 import './App.css'
 import { BoardPreview, type Layer, type LegendItem } from './components/BoardPreview.tsx'
+import { CaseJson } from './components/CaseJson.tsx'
 import { ParameterField } from './components/ParameterField.tsx'
+import { SelectField } from './components/SelectField.tsx'
 import { analyzeDesign, FIELD_GROUPS, toInputs, type FieldKey, type Inputs } from './lib/design.ts'
 import { EXAMPLES, MODE_NAMES, type Mode, type StructureType } from './lib/examples.ts'
 import { CURVE_SAMPLES, ENVELOPE_BINS } from './lib/gielis.ts'
+import { CONDUCTORS, DIELECTRICS, findDielectric } from './lib/materials.ts'
 
 type View = 'structure' | 'curve'
 
@@ -37,7 +40,12 @@ export default function App() {
     () => analyzeDesign(inputs, mode, effectiveStructure),
     [inputs, mode, effectiveStructure],
   )
-  const { errors, curve, envelope, structure, warnings, error } = analysis
+  const { errors, curve, envelope, fidelity, curveNotices, structure, caseRequest, warnings, error } = analysis
+  // Avisos que se muestran: los de la curva siempre; los de los anillos solo en la vista Estructura.
+  const notices = view === 'structure' ? [...curveNotices, ...warnings] : curveNotices
+
+  // Con un material predefinido, εr y tanδ quedan fijos (como en la app).
+  const dielectricPreset = findDielectric(inputs.dielectric)?.preset ?? null
 
   const isArticleCase =
     effectiveStructure === EXAMPLES[mode].structure &&
@@ -45,6 +53,16 @@ export default function App() {
 
   function update(key: FieldKey, value: string) {
     setInputs((prev) => ({ ...prev, [key]: value }))
+  }
+
+  /** Al elegir un dieléctrico predefinido se copian su εr y su tanδ. */
+  function selectDielectric(id: string) {
+    const preset = findDielectric(id)?.preset
+    setInputs((prev) => ({
+      ...prev,
+      dielectric: id,
+      ...(preset ? { eps_r: String(preset.eps_r), loss_tangent: String(preset.loss_tangent) } : {}),
+    }))
   }
 
   function loadArticleCase() {
@@ -84,12 +102,18 @@ export default function App() {
     if (structure.bridges.length > 0) {
       layers.push({ id: 'bridges', kind: 'copper', contours: structure.bridges, closed: true })
     }
+    const legend: LegendItem[] = [
+      { kind: 'copper', label: mode === 'sensor' ? 'Plano de tierra' : 'Cobre' },
+      { kind: 'substrate', label: 'Ranuras' },
+    ]
+    if (structure.line) {
+      // La línea va en la cara de arriba: se dibuja translúcida encima.
+      layers.push({ id: 'line', kind: 'trace', contours: [structure.line], closed: true })
+      legend.push({ kind: 'trace', label: 'Línea microstrip (cara superior)' })
+    }
     return {
       layers,
-      legend: [
-        { kind: 'copper', label: mode === 'sensor' ? 'Plano de tierra' : 'Cobre' },
-        { kind: 'substrate', label: 'Ranuras' },
-      ],
+      legend,
       description:
         mode === 'sensor'
           ? 'Sensor: plano de tierra con dos ranuras abiertas por puentes'
@@ -145,10 +169,28 @@ export default function App() {
             </button>
           </div>
 
-          {FIELD_GROUPS.map((group) => (
+          {FIELD_GROUPS.filter((g) => !g.sensorOnly || mode === 'sensor').map((group) => (
             <div className="panel__section" key={group.title}>
               <h2 className="panel__title">{group.title}</h2>
               <div className="panel__fields">
+                {group.select === 'dielectric' && (
+                  <SelectField
+                    label="Material"
+                    value={inputs.dielectric}
+                    options={DIELECTRICS}
+                    error={errors.dielectric}
+                    onChange={selectDielectric}
+                  />
+                )}
+                {group.select === 'conductor' && (
+                  <SelectField
+                    label="Material"
+                    value={inputs.conductor}
+                    options={CONDUCTORS}
+                    error={errors.conductor}
+                    onChange={(v) => update('conductor', v)}
+                  />
+                )}
                 {group.fields.map((f) => (
                   <ParameterField
                     key={f.key}
@@ -160,10 +202,16 @@ export default function App() {
                     max={f.max}
                     step={f.step}
                     error={errors[f.key]}
+                    disabled={dielectricPreset !== null && (f.key === 'eps_r' || f.key === 'loss_tangent')}
                     onChange={(v) => update(f.key, v)}
                   />
                 ))}
               </div>
+              {group.select === 'dielectric' && dielectricPreset && (
+                <p className="panel__note">
+                  εr y tanδ son los del material elegido. Para escribirlos, elige Personalizado.
+                </p>
+              )}
               {group.title === 'Curva de Gielis' && (
                 <p className="formula" aria-label="Fórmula de Gielis">
                   ρ(θ) = (|cos(mθ/4)/a|<sup>n2</sup> + |sin(mθ/4)/b|<sup>n3</sup>)<sup>−1/n1</sup>
@@ -171,6 +219,11 @@ export default function App() {
               )}
             </div>
           ))}
+
+          <div className="panel__section">
+            <h2 className="panel__title">Caso completo</h2>
+            <CaseJson caseRequest={caseRequest} />
+          </div>
         </section>
 
         <section className="preview" aria-label="Vista previa">
@@ -209,16 +262,30 @@ export default function App() {
             </div>
           )}
 
-          {warnings.length > 0 && view === 'structure' && (
+          {notices.length > 0 && (
             <ul className="notice" role="status">
-              {warnings.map((w) => (
+              {notices.map((w) => (
                 <li key={w}>{w}</li>
               ))}
             </ul>
           )}
 
-          {view === 'curve' && curve && envelope && (
+          {view === 'curve' && curve && envelope && fidelity && (
             <dl className="stats">
+              <div className="stats__item">
+                <dt>¿Se reproduce tal cual en CST?</dt>
+                <dd>
+                  {fidelity.innerDirectionsPct === 0 && fidelity.maxSmoothingMm <= 0.02 * curve.rhoMax
+                    ? 'Sí'
+                    : fidelity.innerDirectionsPct > 0
+                      ? 'No: tiene partes internas'
+                      : 'Casi: puntas redondeadas'}
+                </dd>
+              </div>
+              <div className="stats__item">
+                <dt>Diferencia máxima por suavizado</dt>
+                <dd>{format(fidelity.maxSmoothingMm)} mm</dd>
+              </div>
               <div className="stats__item">
                 <dt>Periodo de θ</dt>
                 <dd>0 a {curve.u}π</dd>
@@ -255,9 +322,16 @@ export default function App() {
                 <dd>{format(structure.copperArea, 2)} mm²</dd>
               </div>
               <div className="stats__item">
-                <dt>Sustrato</dt>
+                <dt>Sustrato (W × L × h)</dt>
                 <dd>
-                  {format(Number(inputs.width_mm))} × {format(Number(inputs.length_mm))} mm
+                  {format(Number(inputs.width_mm))} × {format(Number(inputs.length_mm))} ×{' '}
+                  {format(Number(inputs.thickness_mm))} mm
+                </dd>
+              </div>
+              <div className="stats__item">
+                <dt>Barrido</dt>
+                <dd>
+                  {format(Number(inputs.f_min_ghz))} a {format(Number(inputs.f_max_ghz))} GHz
                 </dd>
               </div>
             </dl>

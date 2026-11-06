@@ -79,3 +79,14 @@ def test_matlab_rat_matches_matlab(m, expected):
 def test_period_multiplier_uses_matlab_rat_for_long_decimals():
     # n = 355 (odd), a != b -> u = 4*d = 4*113 = 452, as in MATLAB.
     assert GielisGeometryService.period_multiplier(3.14159, 2.0, 1.0, 2.0, 2.0) == 452
+
+
+def test_radial_envelope_uses_bin_centers_like_matlab():
+    # GielisMetaCST.mlapp: phiGrid = 0.5*(edges(1:end-1) + edges(2:end)).
+    # With 720 bins the first vertex must sit at half a bin: pi/720 rad.
+    svc = GielisGeometryService()
+    p = GielisParameters(a=1.0, b=1.0, m=4.0, n1=2.0, n2=2.0, n3=2.0)
+    _, _, x, y = svc.generate_curve(p)
+    ring, _ = svc.radial_outer_envelope(x, y)
+    first_angle = np.arctan2(ring[0, 1], ring[0, 0])
+    assert np.isclose(first_angle, np.pi / 720, atol=1e-12)

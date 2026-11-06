@@ -97,6 +97,11 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | Frontend base con Vite + React + TypeScript | Corre en `localhost:5173` |
 | 06/11/2026 | **Previsualización en vivo de la curva de Gielis** | Coincide con Python hasta 15 decimales en los 3 casos |
 | 06/11/2026 | **Anillos concéntricos C1–C4 y estructuras** (normal, complementaria y sensor con puentes) | Las 21 áreas de referencia coinciden con Python en los 3 casos; avisos cuando el tamaño o el gap se ajustan |
+| 06/11/2026 | **Formulario completo**: materiales, espesores, εr, tanδ, frecuencias, línea del sensor y JSON del caso | Los JSON generados para los 3 casos tienen los mismos valores que `backend/examples/` (salvo la tanδ del RO4003C, ver sección 6) |
+| 06/11/2026 | Versión inicial publicada como enlace para el profesor | Le gustó cómo se actualizan las figuras; pidió acomodar el espacio de trabajo y ajustar la figura a las dimensiones |
+| 06/11/2026 | Revisión de qué funciones de `CST_MicrowaveStudio.m` usa la app | 16 funciones; solo `add_to_history` con un cubo está probado en Python (sección 7) |
+| 06/11/2026 | Revisión de la envolvente a raíz del comentario del profesor | Error encontrado y corregido: Python y TypeScript giraban el contorno 0.25° respecto a MATLAB (sección 4.3) |
+| 06/11/2026 | Medida de fidelidad con CST | La página dice si una figura se reproduce tal cual en CST, tiene partes internas que se pierden o puntas que se redondean |
 
 ---
 
@@ -157,8 +162,30 @@ radial**:
 2. Si algún sector quedó vacío, lo rellena interpolando con sus vecinos.
 3. Suaviza con un promedio móvil de 5 sectores.
 
+4. Pone cada vértice en el **centro** de su sector (en MATLAB,
+   `phiGrid = 0.5*(edges(1:end-1) + edges(2:end))`).
+
 El resultado es un polígono de 720 puntos sin cruces: el "contorno que irá a
-CST", que en la web se dibuja en color cobre.
+CST", que en la web se dibuja en color cobre. La app **siempre** usa esta
+envolvente (`seleccionarContornoBaseParaCST`). Tiene otra función,
+`getOriginalContourForCST`, que conserva la forma original resolviendo los
+cruces con `polyshape`, pero no se usa.
+
+**Qué figuras se pueden reproducir en CST.** La envolvente guarda **un solo
+radio por dirección**: el más lejano. Por eso:
+
+- Si cada rayo que sale del centro corta la curva una sola vez (una forma
+  "estrellada"), la envolvente es casi idéntica a la curva. Es el caso del
+  absorbente y del sensor.
+- Si un rayo corta la curva varias veces (lazos, pétalos que se cruzan), las
+  partes internas se pierden: CST solo recibe el borde exterior. Es el caso del
+  transmisor, cuya curva da 10 vueltas.
+- El suavizado de 5 sectores redondea las puntas muy agudas (por ejemplo, con
+  `n1` pequeño).
+
+Esto es lo que señaló el profesor: la curva que se ve cambiar en tiempo real no
+siempre es la que se construye. Por eso la página ahora lo mide y lo avisa
+(sección 4.4, `envelopeFidelity`).
 
 **Los contornos C1–C4.** A partir de esa envolvente, la app crea dos anillos
 concéntricos escalándola: C1 y C2 forman el anillo 1 (exterior), C3 y C4 el
@@ -213,7 +240,18 @@ Al revisarlo encontramos tres problemas:
    `matlab/export_from_app.m` y compararla con `tests/compare_app_export.py`
    (pasos en `backend/README.md`).
 
-**Las pruebas.** `python -m pytest` ejecuta 22 pruebas: forma de la curva,
+4. **El contorno quedaba girado 0.25°.** MATLAB pone cada vértice de la
+   envolvente en el centro de su sector; el código de Python lo ponía en el
+   borde. Como el área no cambia al girar, todas las pruebas pasaban. El script
+   `matlab/export_geometry_reference.m` (que reescribe la lógica en vez de usar
+   la app) tenía el mismo error, así que tampoco lo habría detectado.
+   *Corregido* en Python, en ese script y en TypeScript, con una prueba nueva
+   que revisa el ángulo del primer vértice (π/720). Con la corrección el sensor
+   queda simétrico: su centrado vertical da 0 y sus dos puentes miden igual.
+   Hay que regenerar los valores de referencia una vez con
+   `python tools/update_golden.py` (sección 8).
+
+**Las pruebas.** `python -m pytest` ejecuta 23 pruebas: forma de la curva,
 periodo, envolvente, anillos, estructuras y los tres casos de ejemplo.
 
 ### 4.4 El frontend (React)
@@ -274,7 +312,17 @@ de `index.html` y dibuja dentro el componente `<App />`.
 | `validateParams(p)` | Reglas: `a`, `b`, `n1` distintos de 0; `m > 0` con máximo 2 decimales |
 | `generateCurve(p)` | Las 8000 muestras de la curva, y `ρ` mínimo y máximo |
 | `radialEnvelope(puntos)` | La envolvente de 720 puntos |
+| `radialEnvelopeDetail(puntos)` | Lo mismo, pero también devuelve los ángulos y los radios antes y después de suavizar |
+| `envelopeFidelity(curva, detalle)` | Mide qué se pierde al pasar a la envolvente: porcentaje de direcciones con partes internas, cuánto se meten hacia adentro y cuánto cambia el radio por el suavizado |
 | `polygonArea(puntos)` | Área del polígono con la fórmula del zapato (*shoelace*) |
+
+**Cómo mide la fidelidad `envelopeFidelity`.** En el centro de cada uno de los
+720 sectores traza un rayo desde el origen y calcula dónde corta cada tramo de
+la curva. Si en una dirección hay cortes a radios distintos (más de 0.5 % del
+radio), en esa dirección la curva tiene partes internas que la envolvente no
+conserva. También compara el radio antes y después del suavizado. Con eso la
+página dice, en la vista **Curva**, si la figura se reproduce tal cual en CST, y
+muestra un aviso en las dos vistas cuando no.
 
 Está separada de React a propósito: así se puede probar sola y es fácil de
 comparar con el código de Python, función por función. Se verificó con los
@@ -301,23 +349,45 @@ Se verificó con `backend/golden/`: las áreas de C1–C4, de los anillos, de la
 placa complementaria, de los puentes y de las ranuras del sensor, y el centrado
 del sensor, coinciden con Python en los tres casos.
 
+**`src/lib/materials.ts`** — Los materiales que ofrece la app de MATLAB:
+
+| Dieléctrico | εr | tanδ |
+| --- | --- | --- |
+| FR-4 con pérdidas | 4.3 | 0.02 |
+| Rogers RO4003C | 3.55 | 0.0027 |
+| Rogers RO5880 | 2.2 | 0.0009 |
+| Alúmina | 9.8 | 0.0001 |
+| Personalizado | lo escribe el usuario | lo escribe el usuario |
+
+Conductores: cobre recocido y PEC. Los `id` (`FR4_lossy`, `Copper (annealed)`…)
+son los mismos nombres que usa la app, para que el backend los reconozca.
+
 **`src/lib/design.ts`** — Une todo el cálculo en una sola función pura,
 `analyzeDesign(inputs, modo, estructura)`:
 
 1. Convierte el texto de los campos en números (un campo vacío no es cero).
-2. Valida todos los campos y junta los errores.
+2. Valida todos los campos y junta los errores: espesores mayores que 0,
+   εr ≥ 1, tanδ entre 0 y 0.2, frecuencia máxima mayor que la mínima y, en el
+   sensor, ancho de línea entre 0.1 y 10 mm (el mismo rango de la app).
 3. Si la curva es válida, calcula la curva y su envolvente.
-4. Si además los anillos y el sustrato son válidos, construye C1–C4 (en el
-   sensor: centrado y puentes), revisa si caben en el sustrato y calcula el
-   área de cobre.
+4. Si además los anillos y el tamaño del sustrato son válidos, construye C1–C4
+   (en el sensor: centrado, puentes y línea), revisa si caben y calcula el área
+   de cobre.
+5. Si **todo** el formulario es válido, arma el JSON del caso (sección 4.5).
 
-Así, aunque los anillos tengan un error, la vista **Curva** sigue funcionando.
-Aquí también está `FIELD_GROUPS`, la lista de campos del formulario con su
-nombre, explicación y rango del deslizador. Para agregar un campo, se agrega
-una línea ahí.
+Los errores se separan a propósito: un error en los materiales o las
+frecuencias no impide ver la estructura, y un error en los anillos no impide
+ver la curva. Lo único que exige todo correcto es el JSON.
+
+Aquí también está `FIELD_GROUPS`, la lista de secciones y campos del
+formulario con su nombre, explicación y rango del deslizador. Para agregar un
+campo, se agrega una línea ahí. `sensorOnly` hace que la sección de la línea
+solo aparezca en modo sensor, y `select` pone el selector de material antes de
+los campos.
 
 **`src/lib/examples.ts`** — Los valores completos de los tres casos del
-artículo: modo, estructura, Gielis, anillos y sustrato.
+artículo: modo, estructura, Gielis, anillos, sustrato, metal, frecuencias y
+ancho de línea.
 
 **`src/components/ParameterField.tsx`** — Un parámetro: nombre, explicación,
 deslizador, campo numérico y mensaje de error. Los dos controles muestran el
@@ -325,6 +395,8 @@ mismo valor y llaman a la misma función `onChange`. Detalles:
 
 - `math` indica si el nombre es un símbolo de la fórmula (`a`, `m`, `n1`) y va
   en cursiva, o una palabra (`Gap`, `Tamaño 1`).
+- `disabled` bloquea el campo: se usa en εr y tanδ cuando el material es
+  predefinido.
 - `useId()` genera un identificador único para unir la etiqueta con su campo;
   así, al hacer clic en el texto se enfoca el campo, y los lectores de pantalla
   saben qué es cada cosa.
@@ -333,9 +405,20 @@ mismo valor y llaman a la misma función `onChange`. Detalles:
 - Si hay error, el campo se marca en rojo y el mensaje queda asociado con
   `aria-describedby`.
 
+**`src/components/SelectField.tsx`** — Un selector de material con su etiqueta y
+su mensaje de error.
+
+**`src/components/CaseJson.tsx`** — Muestra el JSON del caso dentro de un
+`<details>` (se abre y se cierra con un clic), con botones para copiarlo y
+descargarlo. Para descargar, crea un archivo en memoria (`Blob`) y simula un
+clic en un enlace. Si el formulario tiene errores, muestra que el JSON aparece
+cuando todo es válido.
+
 **`src/components/BoardPreview.tsx`** — Dibuja la placa con **SVG** (gráficos
 vectoriales del navegador). Recibe una lista de **capas**; cada capa es de un
-tipo (`substrate`, `copper` o `curve`) y tiene uno o varios contornos.
+tipo (`substrate`, `copper`, `trace` o `curve`) y tiene uno o varios contornos.
+`trace` es el cobre de la cara de arriba (la línea del sensor): se dibuja
+translúcido para que se vean debajo las ranuras del plano de tierra.
 
 - **El truco de los huecos:** el cobre usa `fill-rule: evenodd`. Con esa regla,
   un contorno dentro de otro se ve como un hueco. Por eso basta con dibujar
@@ -362,8 +445,13 @@ tipo (`substrate`, `copper` o `curve`) y tiene uno o varios contornos.
   la estructura.
 - El botón *Cargar los valores del artículo* llena el formulario con el caso del
   modo elegido; se desactiva cuando esos valores ya están cargados.
+- `selectDielectric`: al elegir un dieléctrico predefinido copia su εr y su
+  tanδ en los campos, que quedan bloqueados; con *Personalizado* se pueden
+  escribir.
 - Debajo de la placa muestra los avisos (por ejemplo, "El tamaño 2 se ajustó
-  de 2.4 a 1.6…") y los datos: gap y tamaños usados, área de cobre y sustrato.
+  de 2.4 a 1.6…") y los datos: gap y tamaños usados, área de cobre, sustrato
+  y barrido de frecuencias.
+- Al final del formulario está la sección *Caso completo* con el JSON.
 
 **`src/index.css`** — Colores, tipografía y estilos base. Los colores vienen
 del circuito impreso: verde de la máscara antisoldante (fondo de la placa),
@@ -378,7 +466,37 @@ los controles) y una sola columna en el celular, con la placa primero.
 *Atkinson Hyperlegible Next*, diseñada para que los números se lean sin
 confusión.
 
-### 4.5 Las herramientas
+### 4.5 El JSON del caso
+
+Cuando todo el formulario es válido, la página arma un objeto con el caso
+completo. Es lo que el front le enviará al backend para que construya y simule
+la estructura en CST. Ejemplo del absorbente (resumido):
+
+```json
+{
+  "schema_version": "1.0",
+  "mode": "absorber",
+  "structure_type": "normal",
+  "gielis": { "a": 4, "b": 3.6, "m": 8, "n1": 1.1, "n2": 1.7, "n3": 1.7 },
+  "concentric": { "gap_mm": 1.6, "size1": 1.5, "size2": 1, "rotation_deg": 0, "dx_mm": 0, "dy_mm": 0 },
+  "substrate": { "material": "FR4_lossy", "width_mm": 30, "length_mm": 30,
+                 "thickness_mm": 1.6, "eps_r": 4.3, "loss_tangent": 0.02 },
+  "metal": { "material": "Copper (annealed)", "thickness_mm": 0.035 },
+  "transmission_line": null,
+  "frequency": { "min_ghz": 1, "max_ghz": 8 }
+}
+```
+
+- Los nombres son los mismos que usa el código de Python (`size1`, `gap_mm`…)
+  y llevan la unidad en el nombre.
+- `transmission_line` solo tiene valor en el sensor: `{ "width_mm": 3 }`.
+- `schema_version` permite cambiar el formato más adelante sin romper lo
+  anterior.
+- Se puede copiar o descargar desde la sección *Caso completo*. Mientras no
+  exista el backend, sirve para revisar el caso y compararlo con
+  `backend/examples/`.
+
+### 4.6 Las herramientas
 
 | Herramienta | Para qué la usamos |
 | --- | --- |
@@ -444,6 +562,9 @@ git push
 | `m` | Máximo 2 decimales | Evita curvas mal muestreadas (sección 4.4) |
 | Ajustes de tamaño y gap | Se hacen igual que en la app, pero se avisan en pantalla | Ser fieles a MATLAB sin esconder cambios al usuario |
 | Puentes del sensor | Se calculan con el gap escrito por el usuario | Así lo hacen la app y el código de Python |
+| Materiales | Los mismos de la app; con un dieléctrico predefinido, εr y tanδ quedan bloqueados | Igual que la app |
+| tanδ del Rogers RO4003C | 0.0027, como la fija la app (el JSON del artículo dice 0.002) | Con la app se hicieron las simulaciones. **Pendiente confirmarlo** con los autores o el director |
+| Unidades de frecuencia | Solo GHz | La app permite MHz, pero los tres casos usan GHz; menos opciones, menos errores |
 
 ---
 
@@ -453,6 +574,11 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
 
 **Geometría**
 
+- [ ] Regenerar los valores de referencia después de la corrección del ángulo:
+      `python tools/update_golden.py` y luego `python -m pytest`.
+- [ ] Decidir con el profesor si, para figuras con partes internas, basta con
+      el contorno exterior (como hace la app) o si se necesita otro método,
+      como `getOriginalContourForCST`, que la app tiene pero no usa.
 - [ ] Exportar la geometría de la app real en MATLAB para los 3 casos y
       compararla con Python (`backend/README.md`, sección *Comparar con la app
       MATLAB real*).
@@ -462,15 +588,28 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
 - [x] Dibujar los anillos concéntricos C1–C4 en la placa (gap, tamaños,
       rotación y desplazamiento), con las estructuras normal, complementaria
       y del sensor.
-- [ ] Dibujar la línea microstrip del sensor (está en la cara de arriba; los
+- [x] Dibujar la línea microstrip del sensor (está en la cara de arriba; los
       anillos están en el plano de tierra).
-- [ ] Completar el formulario: materiales, espesores, frecuencias y ancho de la
-      línea del sensor.
+- [x] Completar el formulario: materiales, espesores, frecuencias y ancho de la
+      línea del sensor, con el JSON del caso.
+- [ ] Confirmar la tanδ del Rogers RO4003C (0.0027 en la app, 0.002 en el JSON
+      del artículo).
+- [ ] Comentario del profesor: acomodar el espacio de trabajo y ajustar la
+      figura a las dimensiones.
 - [ ] Panel de resultados con las curvas de S-parámetros y la absorción.
 - [ ] Pulido: estados de carga, historial de simulaciones.
 
 **Backend**
 
+- [ ] Segunda prueba de CST desde Python, pedida por el profesor: enviar el VBA
+      de cada función que usa la app y leer resultados con `cst.results`. Las
+      funciones son `addPolygonBlock` (15 usos), `subtractObject` (12),
+      `addParameter` (8), `getSParams`/`getSParameters`/`getSParamStrings`
+      (15), `addBrick` (4), `setBoundaryCondition` (3), `addFieldMonitor` (3),
+      `runSimulation` (2), `defineFloquetModes` (2), `addWaveguidePort` (2),
+      `setSolver`, `setFreq`, `defineUnits` y `addNormalMaterial` (1 cada una).
+      Las de más riesgo: `addPolygonBlock` (cientos de puntos en un bloque) y la
+      lectura de resultados, que en Python usa otro módulo.
 - [ ] Servidor FastAPI con rutas que devuelvan datos de prueba, para conectar
       el front antes de tener CST.
 - [ ] `CSTSession`: generador de VBA portado de `CST_MicrowaveStudio.m`
@@ -487,10 +626,10 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
 - [ ] Integrar front y backend, README final y demostración.
 
 **Cómo se comunicarán el front y el backend.** Cuando exista el servidor, el
-front le enviará los parámetros en JSON y recibirá la geometría y, después,
-las curvas simuladas. Los nombres de los campos serán los mismos que ya usa el
-código de Python (`a`, `b`, `m`, `n1`, `n2`, `n3`, `gap_mm`, `size1`…), con la
-unidad en el nombre. Se definirá en detalle cuando empiece esa etapa.
+front le enviará el JSON del caso (sección 4.5) y recibirá la geometría y,
+después, las curvas simuladas. Lo que falta definir es la respuesta: cómo
+llegan el estado de la simulación y las curvas. Se hará cuando empiece esa
+etapa.
 
 ---
 
@@ -504,6 +643,7 @@ unidad en el nombre. Se definirá en detalle cuando empiece esa etapa.
 | Avisos `LF will be replaced by CRLF` | Git convierte finales de línea entre Linux y Windows | Normal, se puede ignorar |
 | Proyecto lento o archivos bloqueados | El repo estaba dentro de OneDrive | Ya se movió a `C:\Users\USUARIO\reposs` |
 | La librería de CST no importa | Python 3.14 no es compatible con CST 2025 | Usar Python 3.12 |
+| `test_golden_geometry_regression` falla en el sensor | Los valores de referencia son de antes de la corrección del ángulo | `python tools/update_golden.py`, revisar el cambio con `git diff` y volver a correr `pytest` |
 
 ---
 

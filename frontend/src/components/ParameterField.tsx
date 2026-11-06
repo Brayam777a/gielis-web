@@ -13,6 +13,8 @@ type Props = {
   max: number
   step: number
   error?: string
+  /** Bloqueado: se ve el valor pero no se puede cambiar (p. ej., εr de un material predefinido). */
+  disabled?: boolean
   onChange: (value: string) => void
 }
 
@@ -20,7 +22,18 @@ type Props = {
  * Un parámetro: deslizador para explorar rápido y campo numérico para
  * escribir el valor exacto. Los dos muestran el mismo valor.
  */
-export function ParameterField({ label, math = false, hint, value, min, max, step, error, onChange }: Props) {
+export function ParameterField({
+  label,
+  math = false,
+  hint,
+  value,
+  min,
+  max,
+  step,
+  error,
+  disabled = false,
+  onChange,
+}: Props) {
   const id = useId()
   const errorId = `${id}-error`
   const numeric = Number(value)
@@ -41,6 +54,7 @@ export function ParameterField({ label, math = false, hint, value, min, max, ste
           max={max}
           step={step}
           value={sliderValue}
+          disabled={disabled}
           aria-label={`${label}: ${hint}`}
           onChange={(e) => onChange(e.target.value)}
         />
@@ -51,6 +65,7 @@ export function ParameterField({ label, math = false, hint, value, min, max, ste
           inputMode="decimal"
           step={step}
           value={value}
+          disabled={disabled}
           aria-invalid={error ? true : undefined}
           aria-describedby={error ? errorId : undefined}
           onChange={(e) => onChange(e.target.value)}

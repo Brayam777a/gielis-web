@@ -189,8 +189,9 @@ idxExt = [valid-nAng, valid, valid+nAng];
 rExt   = [rmax(valid), rmax(valid), rmax(valid)];
 rfilled = interp1(idxExt,rExt,1:nAng,'linear','extrap');
 
-theta = linspace(0,2*pi,nAng+1);
-theta(end) = [];
+% Como la app: cada vértice va en el CENTRO de su sector.
+edgesOut = linspace(0,2*pi,nAng+1);
+theta = 0.5*(edgesOut(1:end-1) + edgesOut(2:end));
 rs = movmean(rfilled,smoothWindow,'Endpoints','discard');
 
 % movmean(...,'Endpoints','discard') changes length for edge handling in

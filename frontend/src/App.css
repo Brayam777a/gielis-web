@@ -3,7 +3,10 @@
 .app {
   max-width: 1200px;
   margin: 0 auto;
-  padding: 24px 16px 48px;
+  padding-block: 24px 48px;
+  /* El margen lateral respeta los bordes redondeados o la barra de algunos celulares. */
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
 }
 
 .app__header {
@@ -83,7 +86,7 @@
   padding: 0;
   border: 0;
   background: none;
-  color: var(--mask);
+  color: var(--link);
   text-decoration: underline;
   text-underline-offset: 3px;
   cursor: pointer;
@@ -93,12 +96,6 @@
   color: var(--ink-soft);
   text-decoration: none;
   cursor: default;
-}
-
-@media (prefers-color-scheme: dark) {
-  .link-button {
-    color: var(--copper-light);
-  }
 }
 
 .segmented {
@@ -177,13 +174,7 @@
 
 .param__slider {
   width: 100%;
-  accent-color: var(--mask);
-}
-
-@media (prefers-color-scheme: dark) {
-  .param__slider {
-    accent-color: var(--copper);
-  }
+  accent-color: var(--control);
 }
 
 .param__number {
@@ -195,6 +186,21 @@
   text-align: right;
 }
 
+.param__number:disabled,
+.param__slider:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.param__select {
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+}
+
+.param--invalid .param__select,
 .param--invalid .param__number {
   border-color: var(--danger);
 }
@@ -283,6 +289,14 @@
   stroke-linejoin: round;
 }
 
+.board__trace {
+  fill: var(--copper-light);
+  fill-opacity: 0.45;
+  stroke: var(--silk);
+  stroke-width: 1;
+  stroke-dasharray: 6 3;
+}
+
 .board__curve {
   fill: none;
   stroke: var(--silk);
@@ -317,6 +331,13 @@
 .board__legend--substrate::before {
   background: var(--mask);
   outline: 1px solid var(--silk);
+  outline-offset: -1px;
+}
+
+.board__legend--trace::before {
+  background: var(--copper-light);
+  opacity: 0.6;
+  outline: 1px dashed var(--silk);
   outline-offset: -1px;
 }
 
@@ -370,4 +391,53 @@
 .stats dd {
   margin: 0;
   font-weight: 600;
+}
+
+/* ---------- JSON del caso ---------- */
+
+.case-json {
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+
+.case-json summary {
+  padding: 10px 14px;
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.case-json__actions {
+  display: flex;
+  gap: 8px;
+  padding: 0 14px;
+}
+
+.button {
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: var(--radius-control);
+  padding: 4px 12px;
+  cursor: pointer;
+}
+
+.button:hover {
+  border-color: var(--mask);
+}
+
+.case-json__code {
+  margin: 10px 14px 14px;
+  max-height: 320px;
+  overflow: auto;
+  padding: 12px;
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-size: var(--step--1);
+  line-height: 1.4;
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+}
+
+.case-json__empty {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
 }
