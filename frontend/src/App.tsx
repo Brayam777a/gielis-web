@@ -376,6 +376,8 @@ export default function App() {
             </div>
           )}
 
+          {/* Avisos y datos: debajo de la placa, o en una columna a la derecha en pantallas anchas. */}
+          <div className="preview__side">
           {notices.length > 0 && (
             <ul className="notice" role="status">
               {notices.map((w) => (
@@ -456,6 +458,7 @@ export default function App() {
               </div>
             </dl>
           )}
+          </div>
         </section>
       </main>
     </div>

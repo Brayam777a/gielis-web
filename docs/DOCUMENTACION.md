@@ -104,9 +104,11 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | Medida de fidelidad con CST | La página dice si una figura se reproduce tal cual en CST, tiene partes internas que se pierden o puntas que se redondean |
 | 06/11/2026 | Valores de referencia regenerados tras la corrección del ángulo | **23 pruebas pasan** en Python 3.12. Las áreas no cambian (solo ruido en el último decimal); el centrado vertical del sensor pasa de 0.000002 mm a 0 y sus dos puentes quedan con la misma área |
 | 06/11/2026 | **Espacio de trabajo** (comentario del profesor) | Secciones plegables, placa encuadrada al sustrato con cotas W y L, botón *Ajustar al sustrato* y figura que se mueve con el mouse o las flechas |
+| 06/11/2026 | **Espacio de trabajo de pantalla completa** (segunda revisión, a pedido) | La página ocupa todo el ancho y alto de la ventana; el formulario se desplaza en su columna y la placa llena el resto. En 1920 × 1080 la placa pasó de 760 × 760 a 1216 × 880 px; en 1366 × 768 ya no hay que desplazar la página |
 | 06/11/2026 | **Monitores de campo** en el formulario | Mismas opciones de la app (ninguno, E, o E y H) a una frecuencia dentro del barrido; van en el JSON del caso |
 | 06/11/2026 | **Abrir un caso desde un archivo JSON** | Lee el formato de la página y los archivos de `backend/examples/`; los casos se guardan y se vuelven a abrir idénticos |
 | 06/11/2026 | **Pruebas automáticas del front** (Vitest) | 41 pruebas de `gielis.ts`, `concentric.ts`, `design.ts` y `caseFile.ts` contra los valores de referencia de Python y los ejemplos; todas pasan |
+| 06/11/2026 | Verificación del front en el PC de desarrollo | `npm test`: 41 pruebas pasan (Vitest 5.1.0); `npm run lint` sin problemas; `npm run build` genera la página (81 KB comprimida) |
 | 06/11/2026 | Se decide que la vista 3D sea la del modelo **simulado** en CST | Queda para cuando exista el backend; no se hace una reconstrucción propia |
 
 ---
@@ -534,9 +536,20 @@ del circuito impreso: verde de la máscara antisoldante (fondo de la placa),
 cobre (el contorno) y blanco de la serigrafía (cuadrícula y curva original).
 Tiene modo oscuro automático según la configuración del sistema.
 
-**`src/App.css`** — La distribución: dos columnas en pantallas anchas
-(parámetros a la izquierda; la placa a la derecha, fija mientras se recorren
-los controles) y una sola columna en el celular, con la placa primero.
+**`src/App.css`** — La distribución, que cambia según el ancho de la pantalla:
+
+| Ancho | Distribución |
+| --- | --- |
+| Menos de 900 px (celular) | Una columna: la placa primero y el formulario debajo; la página se desplaza |
+| Desde 900 px | Espacio de trabajo de pantalla completa: encabezado de una línea, formulario a la izquierda con su propio desplazamiento, placa llenando todo el alto disponible y los datos debajo |
+| Desde 1200 px | Igual, pero los avisos y datos pasan a una columna de 260 px a la derecha, para no quitarle altura a la placa |
+
+Detalles: la fila principal usa `grid-template-rows: minmax(0, 1fr)` para no
+crecer con el contenido; la placa usa `flex: 1` y el SVG ajusta el dibujo
+dentro del recuadro sin deformarlo (gracias al `viewBox`); al arrastrar no se
+selecciona el texto de las cotas (`user-select: none`); el botón de abrir
+archivos tiene `position: relative` para que su campo oculto no agrande la
+página.
 
 **`index.html`** — Idioma español, título *Gielis Web* y la tipografía
 *Atkinson Hyperlegible Next*, diseñada para que los números se lean sin
@@ -747,6 +760,7 @@ etapa.
 | Avisos `LF will be replaced by CRLF` | Git convierte finales de línea entre Linux y Windows | Normal, se puede ignorar |
 | Proyecto lento o archivos bloqueados | El repo estaba dentro de OneDrive | Ya se movió a `C:\Users\USUARIO\reposs` |
 | La librería de CST no importa | Python 3.14 no es compatible con CST 2025 | Usar Python 3.12 |
+| `npm install` avisa "10 moderate severity vulnerabilities" | Son avisos de paquetes que solo se usan para desarrollar (Vite, Vitest y sus dependencias), no de la página publicada | No usar `npm audit fix --force`, que puede instalar versiones incompatibles. Revisar de vez en cuando con `npm audit` y actualizar con `npm update` |
 | `npm test` dice que no encuentra `vitest` | Vitest no está instalado | `npm install -D vitest` (una sola vez) |
 | `test_golden_geometry_regression` falla en el sensor | Los valores de referencia son de antes de la corrección del ángulo | `python tools/update_golden.py`, revisar el cambio con `git diff` y volver a correr `pytest` |
 

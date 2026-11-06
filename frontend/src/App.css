@@ -1,4 +1,11 @@
-/* Distribución de la pantalla: panel de parámetros a la izquierda, placa a la derecha. */
+/*
+ * Distribución de la pantalla.
+ * - Celular: una columna, con la placa primero.
+ * - Desde 900 px: espacio de trabajo de pantalla completa. El formulario se
+ *   desplaza dentro de su columna y la placa llena todo el espacio que queda.
+ * - Desde 1200 px: los avisos y datos pasan a una columna a la derecha, para
+ *   que no le quiten altura a la placa.
+ */
 
 .app {
   max-width: 1200px;
@@ -35,15 +42,97 @@
 }
 
 @media (min-width: 900px) {
+  .app {
+    max-width: none;
+    height: 100vh;
+    height: 100dvh;
+    display: flex;
+    flex-direction: column;
+    padding-block: 12px;
+  }
+
+  .app__header {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 4px 16px;
+    margin-bottom: 12px;
+  }
+
+  .app__title {
+    font-size: var(--step-1);
+  }
+
   .app__main {
+    flex: 1;
+    min-height: 0;
     grid-template-columns: minmax(300px, 360px) 1fr;
-    align-items: start;
+    /* Una sola fila que ocupa el alto restante, sin crecer con el contenido. */
+    grid-template-rows: minmax(0, 1fr);
+    gap: 16px;
+  }
+
+  /* El formulario se desplaza dentro de su columna. */
+  .panel {
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .preview {
     order: 0;
-    position: sticky;
-    top: 16px;
+    min-height: 0;
+    display: grid;
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    gap: 12px;
+  }
+
+  .preview__head {
+    margin-bottom: 0;
+  }
+
+  /* La placa llena el alto disponible. */
+  .board {
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .board__svg {
+    flex: 1 1 0;
+    min-height: 0;
+    height: 100%;
+    max-height: none;
+    /* El dibujo se ajusta dentro del recuadro sin deformarse (viewBox). */
+    aspect-ratio: auto !important;
+  }
+
+  .board--empty {
+    min-height: 0;
+  }
+
+  .preview__side {
+    min-height: 0;
+    overflow-y: auto;
+  }
+
+  .preview__side > :first-child {
+    margin-top: 0;
+  }
+}
+
+@media (min-width: 1200px) {
+  .preview {
+    grid-template-columns: minmax(0, 1fr) 260px;
+    grid-template-rows: auto minmax(0, 1fr);
+  }
+
+  .preview__side {
+    grid-column: 2;
+    grid-row: 1 / span 2;
+  }
+
+  .preview__side .stats {
+    grid-template-columns: 1fr;
   }
 }
 
@@ -349,6 +438,14 @@
 .board__svg--movable {
   cursor: grab;
   touch-action: none;
+  /* Que al arrastrar no se seleccione el texto de las cotas. */
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+/* El recuadro de foco solo con teclado (para mover con las flechas), no con el mouse. */
+.board__svg:focus:not(:focus-visible) {
+  outline: none;
 }
 
 .board__svg--movable:active {
@@ -526,6 +623,8 @@
 /* ---------- Abrir un caso ---------- */
 
 .open-case {
+  /* Contiene el campo de archivo oculto (position: absolute). */
+  position: relative;
   display: grid;
   gap: 8px;
   justify-items: start;
