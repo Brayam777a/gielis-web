@@ -110,6 +110,10 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | **Pruebas automáticas del front** (Vitest) | 41 pruebas de `gielis.ts`, `concentric.ts`, `design.ts` y `caseFile.ts` contra los valores de referencia de Python y los ejemplos; todas pasan |
 | 06/11/2026 | Verificación del front en el PC de desarrollo | `npm test`: 41 pruebas pasan (Vitest 5.1.0); `npm run lint` sin problemas; `npm run build` genera la página (81 KB comprimida) |
 | 06/11/2026 | Se decide que la vista 3D sea la del modelo **simulado** en CST | Queda para cuando exista el backend; no se hace una reconstrucción propia |
+| 06/11/2026 | **Pruebas de construcción en CST desde Python** (Miguel, `docs/GIELIS_TRANSFERENCIA_TECNICA_CLOUD_CODE.md`) | En CST 2025.4 con Python 3.12.10 funcionan: unidades, materiales FR4 y RO4003C, Brick, sustrato FR4 (1440 mm³), extrusión de polígono, resta booleana (100 → 50 mm³) y una figura de Gielis de 8000 puntos (6.0986 mm³). El volumen coincide con el área de nuestra curva × 0.035 mm hasta 6 decimales |
+| 06/11/2026 | Revisión de ese documento | 4 diferencias con lo que manda la app (sección 7, *Backend*) |
+| 06/11/2026 | Decisión: tanδ del RO4003C = **0.0027** | La app lo usa en el menú y al crear el material en CST; el 0.002 solo está en `examples/transmitter_case_params.json` |
+| 06/11/2026 | Publicación automática del front en GitHub Pages | Cada `git push` a `main` corre pruebas, lint y build, y publica la página en `https://brayam777a.github.io/gielis-web/` |
 
 ---
 
@@ -611,7 +615,7 @@ la estructura en CST. Ejemplo del absorbente (resumido):
 ```powershell
 cd C:\Users\USUARIO\reposs\gielis-web\gielis-web\backend
 .venv\Scripts\activate          # debe aparecer (.venv) al inicio
-python -m pytest                # esperado: 22 passed
+python -m pytest                # esperado: 23 passed
 ```
 
 La primera vez, antes de esto: `py -3.12 -m venv .venv` y, ya activado,
@@ -643,6 +647,24 @@ git add .
 git commit -m "Describe el cambio en una frase"
 git push
 ```
+
+### Publicar el front para que otros lo vean
+
+La página se publica sola en **GitHub Pages** con
+`.github/workflows/pages.yml`. Cada vez que se sube algo de `frontend/` a
+`main`, GitHub corre `npm test`, `npm run lint` y `npm run build`, y publica
+la carpeta `dist`. Si una prueba falla, no se publica.
+
+- Dirección: `https://brayam777a.github.io/gielis-web/`. Se abre desde
+  cualquier PC o celular; no hace falta instalar nada.
+- Configuración, una sola vez: en GitHub, *Settings → Pages → Build and
+  deployment → Source: GitHub Actions*.
+- Para ver si se publicó: pestaña *Actions* del repositorio (verde = listo).
+- `vite.config.ts` tiene `base: './'` para que los archivos carguen aunque la
+  página esté en la subcarpeta `/gielis-web/`.
+- Cuando exista el backend, la página publicada seguirá mostrando la
+  geometría, pero *Simular* solo funcionará donde se pueda llegar al servidor
+  del PC de CST (que no se expone a Internet).
 
 ---
 
@@ -697,8 +719,11 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
       anillos están en el plano de tierra).
 - [x] Completar el formulario: materiales, espesores, frecuencias y ancho de la
       línea del sensor, con el JSON del caso.
-- [ ] Confirmar la tanδ del Rogers RO4003C (0.0027 en la app, 0.002 en el JSON
-      del artículo).
+- [x] tanδ del Rogers RO4003C: **0.0027**, como la app (decidido el
+      06/11/2026). El 0.002 del JSON del artículo no se usa; el material
+      `Gielis_Rogers_RO4003C` creado en CST debe pasar a 0.0027.
+- [ ] Publicar el front en GitHub Pages (`.github/workflows/pages.yml`), para
+      que el profesor lo abra desde cualquier PC.
 - [x] Comentario del profesor: acomodar el espacio de trabajo y ajustar la
       figura a las dimensiones. Falta que él confirme que es lo que pedía.
 - [x] Monitores de campo E y H a una frecuencia.
@@ -727,6 +752,27 @@ Con esto está hecho todo lo del front que no necesita el backend.
       `setSolver`, `setFreq`, `defineUnits` y `addNormalMaterial` (1 cada una).
       Las de más riesgo: `addPolygonBlock` (cientos de puntos en un bloque) y la
       lectura de resultados, que en Python usa otro módulo.
+- [x] Construir piezas sueltas en CST desde Python (Miguel): unidades,
+      materiales, Brick, extrusión de polígono, resta booleana y una curva de
+      Gielis de 8000 puntos. Datos útiles: el getter de unidades es
+      `Units.GetUnit("Length")`; las consultas usan el nombre
+      `"Componente:Nombre"`; se verifica con `GetVolume`,
+      `GetMaterialNameForShape` y `GetLooseBoundingBoxOfShape`.
+- [ ] Ajustes al pasar esas pruebas al backend real:
+      1. La prueba extruyó la **curva cruda** con θ de 0 a 2π. La app manda a
+         CST la **envolvente radial** (720 puntos) con θ de 0 a u·π. En el
+         absorbente (u = 2) da casi lo mismo: 174.245 mm² la curva y
+         174.675 mm² la envolvente (+0.25 %), pero en el transmisor (u = 20)
+         la curva cruda tiene cruces y la envolvente no. Hay que usar
+         `gielis_geometry` (`radial_envelope` y `build_concentric`), no una
+         función nueva.
+      2. C1–C4 y la equivalencia con la fórmula de MATLAB ya están hechas y
+         probadas (23 pruebas en Python, 41 en el front); solo falta la
+         comparación con la app real (`export_from_app.m`).
+      3. El material Rogers se creó con tanδ 0.002; se decidió usar 0.0027,
+         como la app.
+      4. El archivo de la app se llama `src/GielisMetaCST.mlapp` (sin guion
+         bajo), y el sustrato del sensor es W = 20 mm en x por L = 13 mm en y.
 - [ ] Servidor FastAPI con rutas que devuelvan datos de prueba, para conectar
       el front antes de tener CST.
 - [ ] `CSTSession`: generador de VBA portado de `CST_MicrowaveStudio.m`
