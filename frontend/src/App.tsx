@@ -4,6 +4,8 @@ import { BoardPreview, type Layer, type LegendItem } from './components/BoardPre
 import { CaseJson } from './components/CaseJson.tsx'
 import { OpenCase } from './components/OpenCase.tsx'
 import { ParameterField } from './components/ParameterField.tsx'
+import { ResultsView } from './components/ResultsView.tsx'
+import { SimulateBar } from './components/SimulateBar.tsx'
 import { SelectField } from './components/SelectField.tsx'
 import {
   analyzeDesign,
@@ -18,8 +20,11 @@ import { EXAMPLES, MODE_NAMES, type Mode, type StructureType } from './lib/examp
 import type { LoadedCase } from './lib/caseFile.ts'
 import { CURVE_SAMPLES, ENVELOPE_BINS } from './lib/gielis.ts'
 import { CONDUCTORS, DIELECTRICS, findDielectric } from './lib/materials.ts'
+import { useSimulation } from './lib/useSimulation.ts'
 
-type View = 'structure' | 'curve'
+type View = 'structure' | 'curve' | 'results'
+
+const VIEW_NAMES: Record<View, string> = { structure: 'Estructura', curve: 'Curva', results: 'Resultados' }
 
 const MODES: Mode[] = ['absorber', 'transmitter', 'sensor']
 const STRUCTURE_NAMES: Record<StructureType, string> = {
@@ -53,6 +58,8 @@ export default function App() {
   const [fitMessage, setFitMessage] = useState<string | null>(null)
   // dx y dy al empezar a arrastrar la figura (el arrastre suma a partir de ahí).
   const dragOrigin = useRef({ dx: 0, dy: 0 })
+  // Servidor, simulación elegida e historial (lib/useSimulation.ts).
+  const sim = useSimulation()
 
   // En modo sensor la estructura siempre es complementaria (como en la app).
   const effectiveStructure: StructureType = mode === 'sensor' ? 'complementary' : structureType
@@ -123,6 +130,13 @@ export default function App() {
     setStructureType(c.structure)
     setInputs(c.inputs)
     setFitMessage(null)
+  }
+
+  /** Manda el caso al servidor y pasa a la vista de resultados para ver el avance. */
+  function simulate() {
+    if (!caseRequest) return
+    void sim.start(caseRequest)
+    setView('results')
   }
 
   function loadArticleCase() {
@@ -333,22 +347,17 @@ export default function App() {
         <section className="preview" aria-label="Vista previa">
           <div className="preview__head">
             <div className="segmented" role="group" aria-label="Qué mostrar">
-              <button
-                type="button"
-                className="segmented__button"
-                aria-pressed={view === 'structure'}
-                onClick={() => setView('structure')}
-              >
-                Estructura
-              </button>
-              <button
-                type="button"
-                className="segmented__button"
-                aria-pressed={view === 'curve'}
-                onClick={() => setView('curve')}
-              >
-                Curva
-              </button>
+              {(['structure', 'curve', 'results'] as const).map((v) => (
+                <button
+                  key={v}
+                  type="button"
+                  className="segmented__button"
+                  aria-pressed={view === v}
+                  onClick={() => setView(v)}
+                >
+                  {VIEW_NAMES[v]}
+                </button>
+              ))}
             </div>
             {view === 'curve' && (
               <label className="toggle">
@@ -356,7 +365,13 @@ export default function App() {
                 Mostrar la curva original
               </label>
             )}
+            <SimulateBar sim={sim} caseRequest={caseRequest} onSimulate={simulate} />
           </div>
+
+          {view === 'results' ? (
+            <ResultsView sim={sim} currentCase={caseRequest} onLoadCase={loadCase} />
+          ) : (
+          <>
 
           {board ? (
             <BoardPreview
@@ -459,6 +474,8 @@ export default function App() {
             </dl>
           )}
           </div>
+          </>
+          )}
         </section>
       </main>
     </div>

@@ -659,3 +659,354 @@
 .open-case__message--error {
   color: var(--danger);
 }
+
+/* ---------- Simular ---------- */
+
+.simulate {
+  margin-left: auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.simulate__status {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+}
+
+/* Punto de color antes del estado del servidor. */
+.simulate__status::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  vertical-align: 1px;
+}
+
+.simulate__status--online::before {
+  background: var(--control);
+}
+
+.simulate__status--offline::before {
+  background: var(--danger);
+}
+
+.button--primary {
+  background: var(--mask);
+  border-color: var(--mask);
+  color: var(--silk);
+  font-weight: 600;
+  padding-inline: 18px;
+}
+
+.button--primary:hover:not(:disabled) {
+  background: var(--mask-deep);
+}
+
+/* ---------- Resultados ---------- */
+
+/* Ocupa el lugar de la placa y usa su mismo fondo verde. */
+.results {
+  display: flex;
+  flex-direction: column;
+  min-height: 420px;
+  background: var(--mask-deep);
+  border-radius: var(--radius-panel);
+  padding: 12px;
+  color: var(--silk);
+}
+
+.results__empty {
+  flex: 1;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 12px;
+  padding: 24px;
+  text-align: center;
+}
+
+.results__empty code,
+.results__code {
+  font-family: ui-monospace, 'Cascadia Code', Consolas, monospace;
+  font-size: var(--step--1);
+}
+
+.results__code {
+  margin: 0;
+  padding: 12px 16px;
+  border-radius: var(--radius-control);
+  background: rgb(0 0 0 / 0.28);
+  text-align: left;
+  white-space: pre;
+}
+
+.results__hint {
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+}
+
+.results .results__hint {
+  color: var(--silk);
+  opacity: 0.75;
+}
+
+.results__error {
+  color: #f6b4ad;
+  max-width: 60ch;
+}
+
+.results__status {
+  font-size: var(--step-1);
+  font-weight: 600;
+}
+
+.results__progress-card {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  width: min(320px, 100%);
+}
+
+.results .button {
+  color: var(--ink);
+}
+
+.results__progress {
+  width: 100%;
+  height: 8px;
+  accent-color: var(--copper);
+}
+
+.results__charts {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.results__notice {
+  margin: 0;
+  color: var(--ink);
+}
+
+.results__readout {
+  min-height: 1.5em;
+  font-size: var(--step--1);
+  opacity: 0.85;
+  padding-inline: 4px;
+}
+
+.results-chart {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.results-chart__title {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  gap: 4px 16px;
+  padding: 0 4px 4px;
+  font-size: var(--step--1);
+  font-weight: 600;
+}
+
+.results-chart__legend {
+  display: flex;
+  gap: 16px;
+  font-weight: 400;
+}
+
+.results-chart__key::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 2px solid;
+}
+
+.results-chart__key--s11::before,
+.results-chart__key--absorption::before {
+  border-color: var(--copper-light);
+}
+
+.results-chart__key--s21::before {
+  border-color: var(--silk);
+}
+
+.results-chart__plot {
+  height: 240px;
+  min-height: 0;
+}
+
+.results-chart__plot svg {
+  display: block;
+  touch-action: pan-y;
+}
+
+.results-chart__grid line {
+  stroke: var(--silk);
+  stroke-opacity: 0.14;
+}
+
+.results-chart__labels text {
+  fill: var(--silk);
+  fill-opacity: 0.75;
+  font-size: 12px;
+  font-family: var(--font);
+}
+
+.results-chart__unit {
+  fill-opacity: 1;
+  font-weight: 600;
+}
+
+.results-chart__line {
+  fill: none;
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.results-chart__line--s11,
+.results-chart__line--absorption {
+  stroke: var(--copper-light);
+}
+
+.results-chart__line--s21 {
+  stroke: var(--silk);
+}
+
+.results-chart__marker {
+  fill: var(--mask-deep);
+}
+
+.results-chart__hover line {
+  stroke: var(--silk);
+  stroke-opacity: 0.5;
+  stroke-dasharray: 3 3;
+}
+
+.results-chart__hover circle {
+  fill: var(--silk);
+}
+
+/* Columna de resonancias e historial */
+
+.preview__side > section + section {
+  margin-top: 20px;
+}
+
+.results__heading {
+  font-size: var(--step-0);
+  font-weight: 600;
+  margin-bottom: 8px;
+}
+
+.results__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--step--1);
+}
+
+.results__table th,
+.results__table td {
+  padding: 4px 6px;
+  text-align: right;
+  border-bottom: 1px solid var(--line);
+}
+
+.results__table th {
+  color: var(--ink-soft);
+  font-weight: 400;
+}
+
+.results__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.history {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.history__item {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0 8px;
+  padding: 6px 10px;
+  text-align: left;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.history__item:hover {
+  border-color: var(--control);
+}
+
+.history__item[aria-current='true'] {
+  border-color: var(--control);
+  box-shadow: inset 3px 0 0 var(--control);
+}
+
+.history__status {
+  font-size: var(--step--1);
+  color: var(--copper);
+}
+
+.history__status--done {
+  color: var(--control);
+}
+
+.history__status--failed {
+  color: var(--danger);
+}
+
+.history__status--cancelled {
+  color: var(--ink-soft);
+}
+
+.history__time {
+  grid-column: 1 / -1;
+  color: var(--ink-soft);
+  font-size: var(--step--1);
+}
+
+@media (min-width: 900px) {
+  .results {
+    min-height: 0;
+  }
+
+  /* La gráfica de parámetros S el doble de alta que la de absorción. */
+  .results-chart {
+    flex: 2 1 0;
+    min-height: 0;
+  }
+
+  .results-chart + .results-chart {
+    flex-grow: 1;
+  }
+
+  .results-chart__plot {
+    flex: 1;
+    height: auto;
+    min-height: 90px;
+  }
+}

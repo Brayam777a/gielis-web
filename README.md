@@ -27,10 +27,11 @@ gielis-web/
 cd backend
 py -3.12 -m venv .venv
 .venv\Scripts\activate
-python -m pip install -e ".[test]"
+python -m pip install -e ".[api,test]"
 python -m pytest
+uvicorn gielis_api.main:app --reload   # servidor; déjalo abierto
 
-# frontend
+# frontend, en otra terminal
 cd ..\frontend
 npm install
 npm run dev

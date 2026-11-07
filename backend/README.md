@@ -12,10 +12,22 @@ conectar CST.
 - Estructuras Normal `(C1-C2) + (C3-C4)` y Complementary.
 - Sensor CSRR: dos ranuras y dos puentes; validación dentro del sustrato.
 
+## Servidor (`gielis_api`)
+
+Recibe el JSON del caso del front, lo pone en una cola (una simulación a la
+vez), construye la geometría con `gielis_geometry` y devuelve las curvas. Por
+ahora el simulador es de **prueba** (`MockSimulator`); el de CST tendrá el
+mismo método `run`. Detalle en `docs/DOCUMENTACION.md`, sección 4.7.
+
+```bash
+python -m pip install -e ".[api,test]"
+uvicorn gielis_api.main:app --reload     # http://localhost:8000/docs
+```
+
 ## Tests
 
 ```bash
-python -m pip install -e ".[test]"
+python -m pip install -e ".[api,test]"
 python -m pytest
 ```
 

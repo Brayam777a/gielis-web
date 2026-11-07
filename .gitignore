@@ -12,10 +12,10 @@ dist/
 .vite/
 *.local
 
-# CST: proyectos y resultados generados (pesan mucho y se regeneran)
+# CST y simulaciones: proyectos e historial generados (pesan mucho y se regeneran)
 *.cst
 CST_MicrowaveStudio_Files/
-backend/jobs_data/
+backend/runs/
 
 # Exportes de MATLAB para comparar (se generan en cada máquina)
 *_app.json

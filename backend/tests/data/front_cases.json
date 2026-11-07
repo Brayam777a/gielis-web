@@ -1,0 +1,121 @@
+{
+  "absorber": {
+    "schema_version": "1.0",
+    "mode": "absorber",
+    "structure_type": "normal",
+    "gielis": {
+      "a": 4,
+      "b": 3.6,
+      "m": 8,
+      "n1": 1.1,
+      "n2": 1.7,
+      "n3": 1.7
+    },
+    "concentric": {
+      "gap_mm": 1.6,
+      "size1": 1.5,
+      "size2": 1,
+      "rotation_deg": 0,
+      "dx_mm": 0,
+      "dy_mm": 0
+    },
+    "substrate": {
+      "material": "FR4_lossy",
+      "width_mm": 30,
+      "length_mm": 30,
+      "thickness_mm": 1.6,
+      "eps_r": 4.3,
+      "loss_tangent": 0.02
+    },
+    "metal": {
+      "material": "Copper (annealed)",
+      "thickness_mm": 0.035
+    },
+    "transmission_line": null,
+    "frequency": {
+      "min_ghz": 1,
+      "max_ghz": 8
+    },
+    "field_monitors": null
+  },
+  "transmitter": {
+    "schema_version": "1.0",
+    "mode": "transmitter",
+    "structure_type": "normal",
+    "gielis": {
+      "a": 1,
+      "b": 1,
+      "m": 3.4,
+      "n1": 1,
+      "n2": -2,
+      "n3": 1
+    },
+    "concentric": {
+      "gap_mm": 1,
+      "size1": 11.6,
+      "size2": 8.6,
+      "rotation_deg": 0,
+      "dx_mm": 0,
+      "dy_mm": 0
+    },
+    "substrate": {
+      "material": "Rogers_RO4003C",
+      "width_mm": 30,
+      "length_mm": 30,
+      "thickness_mm": 1.524,
+      "eps_r": 3.55,
+      "loss_tangent": 0.0027
+    },
+    "metal": {
+      "material": "PEC",
+      "thickness_mm": 0.035
+    },
+    "transmission_line": null,
+    "frequency": {
+      "min_ghz": 1,
+      "max_ghz": 8
+    },
+    "field_monitors": null
+  },
+  "sensor": {
+    "schema_version": "1.0",
+    "mode": "sensor",
+    "structure_type": "complementary",
+    "gielis": {
+      "a": 1.5,
+      "b": 1.5,
+      "m": 6,
+      "n1": 1.5,
+      "n2": 1.5,
+      "n3": 1.5
+    },
+    "concentric": {
+      "gap_mm": 1,
+      "size1": 2.4,
+      "size2": 1.4,
+      "rotation_deg": 0,
+      "dx_mm": 0,
+      "dy_mm": 0
+    },
+    "substrate": {
+      "material": "FR4_lossy",
+      "width_mm": 20,
+      "length_mm": 13,
+      "thickness_mm": 1.6,
+      "eps_r": 4.3,
+      "loss_tangent": 0.02
+    },
+    "metal": {
+      "material": "Copper (annealed)",
+      "thickness_mm": 0.035
+    },
+    "transmission_line": {
+      "width_mm": 3
+    },
+    "frequency": {
+      "min_ghz": 1,
+      "max_ghz": 8
+    },
+    "field_monitors": null
+  }
+}

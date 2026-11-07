@@ -67,6 +67,7 @@ experiencia de uso.
 gielis-web/
 |-- backend/
 |   |-- gielis_geometry/service.py   Geometría en Python (NumPy + Shapely)
+|   |-- gielis_api/                  Servidor FastAPI: cola y simulaciones (sección 4.7)
 |   |-- tests/                       Pruebas automáticas (pytest)
 |   |-- examples/                    Los 3 casos del artículo (JSON)
 |   |-- golden/                      Valores de referencia para las pruebas
@@ -113,6 +114,8 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | **Pruebas de construcción en CST desde Python** (Miguel, `docs/GIELIS_TRANSFERENCIA_TECNICA_CLOUD_CODE.md`) | En CST 2025.4 con Python 3.12.10 funcionan: unidades, materiales FR4 y RO4003C, Brick, sustrato FR4 (1440 mm³), extrusión de polígono, resta booleana (100 → 50 mm³) y una figura de Gielis de 8000 puntos (6.0986 mm³). El volumen coincide con el área de nuestra curva × 0.035 mm hasta 6 decimales |
 | 06/11/2026 | Revisión de ese documento | 4 diferencias con lo que manda la app (sección 7, *Backend*) |
 | 06/11/2026 | Decisión: tanδ del RO4003C = **0.0027** | La app lo usa en el menú y al crear el material en CST; el 0.002 solo está en `examples/transmitter_case_params.json` |
+| 06/11/2026 | **Servidor FastAPI** (`backend/gielis_api/`) con cola de simulaciones y **simulador de prueba** | Recibe el JSON del caso, construye la geometría real con `gielis_geometry` y devuelve curvas de prueba. Con la fórmula de anillo resonante, el absorbente da 2.477 GHz (artículo: 2.435) y el sensor 4.24 GHz (artículo: 4.171). 29 pruebas nuevas en Python |
+| 06/11/2026 | **Botón *Simular* y vista *Resultados*** en el front | Estado y avance de la simulación con opción de cancelar, gráficas de S11, S21 y absorción, resonancias, CSV, historial y aviso si el diseño cambió. 5 pruebas nuevas (46 en total) |
 | 06/11/2026 | Publicación automática del front en GitHub Pages | Cada `git push` a `main` corre pruebas, lint y build, y publica la página en `https://brayam777a.github.io/gielis-web/` |
 
 ---
@@ -606,6 +609,89 @@ la estructura en CST. Ejemplo del absorbente (resumido):
 | **TypeScript** | Revisa tipos antes de ejecutar |
 | **ESLint** | Revisa errores comunes en el código del front |
 
+
+### 4.7 El servidor y la simulación
+
+**Idea general.** El front no habla con CST: le manda el JSON del caso
+(sección 4.5) a un servidor en Python. El servidor pone el caso en una cola,
+lo simula y guarda el resultado. El front pregunta cada 0.7 s cómo va hasta
+que termina.
+
+```
+Front (React)                         Servidor (FastAPI, backend/gielis_api)
+  [Simular] ── POST /api/simulations ──▶ valida el JSON (schemas.py)
+                                         └▶ cola (jobs.py) ──▶ hilo de fondo
+  cada 0.7 s ── GET /api/simulations/id ▶   building:   geometría real (geometry.py)
+                                            simulating: simulador (simulator.py)
+  gráficas  ◀── estado + curvas ─────────   done: curvas, resonancias (results.py)
+```
+
+**Archivos del servidor (`backend/gielis_api/`)**
+
+| Archivo | Qué hace |
+| --- | --- |
+| `schemas.py` | Forma del JSON del caso y de las respuestas (Pydantic). Si algo no cuadra (frecuencia máxima menor que la mínima, sensor sin línea, un campo inventado), responde 422 y el caso no entra a la cola. |
+| `geometry.py` | Del caso a los contornos: curva → envolvente → C1–C4 → centrado del sensor. Usa `gielis_geometry`, así que es la misma geometría probada contra MATLAB. Es lo que usará el adaptador de CST. |
+| `simulator.py` | Quién simula. `MockSimulator` construye la geometría real y devuelve curvas de **prueba**. El adaptador de CST será otra clase con el mismo método `run(caso, progreso)`; nada más cambia. |
+| `results.py` | Absorción `A = 1 − |S11|² − |S21|²` y búsqueda de resonancias. Sirve igual para las curvas de prueba y para las de CST. |
+| `jobs.py` | La cola: una simulación a la vez (CST usa una licencia), cancelar, y guardar cada trabajo en `backend/runs/<id>/job.json` para que el historial sobreviva a un reinicio. |
+| `main.py` | Las rutas HTTP y la configuración (CORS, variables de entorno). |
+
+**Rutas**
+
+| Ruta | Qué hace |
+| --- | --- |
+| `GET /api/health` | ¿Está vivo? ¿Qué simulador usa (`mock` o `cst`)? |
+| `POST /api/simulations` | Pone un caso en la cola. Responde 202 con el trabajo. |
+| `GET /api/simulations` | Historial, sin curvas, del más nuevo al más viejo. |
+| `GET /api/simulations/{id}` | Estado, caso y, si terminó, las curvas. |
+| `POST /api/simulations/{id}/cancel` | Cancela. 409 si ya había terminado. |
+
+Estados de un trabajo: `queued` (en cola) → `building` (construyendo) →
+`simulating` (simulando) → `done` (terminada), o `failed` (falló, con el
+mensaje) o `cancelled` (cancelada). Si el servidor se apaga a mitad de una
+simulación, al arrancar la marca como fallida.
+
+**Qué hay en un resultado:** frecuencias en GHz, S11 y S21 en dB (S21 no existe
+en el absorbente, que tiene plano de tierra), absorción entre 0 y 1 (no se
+calcula en el sensor), resonancias y notas.
+
+**Qué se considera resonancia** (lo que reporta el artículo en cada modo):
+
+| Modo | Se busca |
+| --- | --- |
+| Absorbente | Mínimos de S11 por debajo de −6 dB |
+| Transmisor normal | Mínimos de S21 por debajo de −10 dB (banda rechazada) |
+| Transmisor complementario | Máximos de S21 por encima de −3 dB (banda que pasa) |
+| Sensor | Mínimos de S21 por debajo de −3 dB |
+
+**El simulador de prueba.** Las curvas NO son de CST y la página lo dice en
+cada resultado. Pone un pico por anillo con la fórmula de anillo resonante
+f ≈ c / (P·√εef), donde P es el perímetro del anillo (C1 o C3) y
+εef = (εr + 1)/2. En el sensor, los anillos están abiertos por un puente y
+resuenan a media onda (2·P). Es una estimación de libro, pero cae cerca del
+artículo: absorbente 2.477 y 3.716 GHz (artículo: 2.435 y 3.849), sensor
+4.24 GHz (artículo: 4.171). En el transmisor no se parece tanto (2.29 y
+3.08 GHz contra 3.114 y 5.403): ahí la estructura no se comporta como un
+anillo aislado. Sirve para construir y probar la página, no para sacar
+conclusiones.
+
+**Archivos del front**
+
+| Archivo | Qué hace |
+| --- | --- |
+| `lib/api.ts` | Las 5 llamadas al servidor y sus tipos. Dirección por defecto `http://localhost:8000`; se cambia con `VITE_API_URL` en `frontend/.env.local`. Si no hay respuesta lanza `NetworkError`. |
+| `lib/useSimulation.ts` | Hook con el estado: servidor (buscando, listo, apagado), historial, simulación elegida que se consulta hasta que termina, y las acciones simular, cancelar, elegir y conectar. Si el servidor se cae, lo busca de nuevo cada 5 s. |
+| `lib/simulation.ts` | Funciones puras: nombres de los estados, comparar casos, CSV, marcas de los ejes y punto más cercano. Probadas en `simulation.test.ts`. |
+| `components/SimulateBar.tsx` | Estado del servidor y botón *Simular*, arriba de la vista. Está desactivado si el servidor está apagado o hay campos en rojo. |
+| `components/ResultsView.tsx` | Vista *Resultados*: instrucciones si el servidor está apagado, avance con *Cancelar*, gráficas, resonancias, *Descargar CSV*, *Cargar este caso* e historial. Avisa si el diseño del formulario cambió después de la simulación. |
+| `components/ResultsChart.tsx` | Gráfica de líneas en SVG, sin librerías. Mide su tamaño con `ResizeObserver` para que el texto no se deforme. Al pasar el mouse marca la misma frecuencia en las dos gráficas. |
+
+**En la página publicada (GitHub Pages)** el front no busca el servidor solo:
+muestra *Conectar con el servidor*. Así, quien solo quiere ver el diseño no
+recibe un aviso del navegador pidiendo acceso a la red local. En tu PC
+(`localhost`) lo busca apenas abre la página.
+
 ---
 
 ## 5. Cómo ejecutar el proyecto
@@ -615,11 +701,28 @@ la estructura en CST. Ejemplo del absorbente (resumido):
 ```powershell
 cd C:\Users\USUARIO\reposs\gielis-web\gielis-web\backend
 .venv\Scripts\activate          # debe aparecer (.venv) al inicio
-python -m pytest                # esperado: 23 passed
+python -m pytest                # esperado: 52 passed
 ```
 
 La primera vez, antes de esto: `py -3.12 -m venv .venv` y, ya activado,
-`python -m pip install -e ".[test]"`.
+`python -m pip install -e ".[api,test]"`. Si ya tenías el `.venv`, repite ese
+`pip install` una vez para que se instalen FastAPI, Uvicorn y httpx.
+
+### Servidor (para el botón *Simular*)
+
+En una terminal aparte, que se deja abierta:
+
+```powershell
+cd C:\Users\USUARIO\reposs\gielis-web\gielis-web\backend
+.venv\Scripts\activate
+uvicorn gielis_api.main:app --reload    # http://localhost:8000
+```
+
+- `http://localhost:8000/docs` muestra todas las rutas y deja probarlas.
+- `--reload` reinicia el servidor solo cuando cambias un archivo `.py`.
+- El historial queda en `backend/runs/` (no se sube a GitHub).
+- Para que el simulador de prueba vaya más rápido o más lento:
+  `$env:GIELIS_MOCK_DELAY = "0.05"` antes de `uvicorn` (segundos por paso).
 
 ### Frontend
 
@@ -635,7 +738,7 @@ Pruebas del front (la primera vez hay que instalar Vitest con
 `npm install -D vitest`):
 
 ```powershell
-npm test                        # esperado: 41 pruebas que pasan
+npm test                        # esperado: 46 pruebas que pasan
 ```
 
 ### Guardar cambios en GitHub
@@ -734,11 +837,11 @@ Con esto está hecho todo lo del front que no necesita el backend.
 
 *Necesitan el backend (al principio, con datos de prueba):*
 
-- [ ] Botón *Simular*: enviar el JSON del caso y mostrar el estado (en cola,
+- [x] Botón *Simular*: enviar el JSON del caso y mostrar el estado (en cola,
       construyendo, simulando, terminado, falló) con opción de cancelar.
-- [ ] Panel de resultados: curvas de S11, S21 y absorción, tabla de
-      resonancias y exportar los datos.
-- [ ] Historial de simulaciones.
+- [x] Panel de resultados: curvas de S11, S21 y absorción, tabla de
+      resonancias y exportar los datos (CSV).
+- [x] Historial de simulaciones.
 - [ ] Vista 3D del modelo que construyó y simuló CST (exportado como STL).
 
 **Backend**
@@ -773,14 +876,17 @@ Con esto está hecho todo lo del front que no necesita el backend.
          como la app.
       4. El archivo de la app se llama `src/GielisMetaCST.mlapp` (sin guion
          bajo), y el sustrato del sensor es W = 20 mm en x por L = 13 mm en y.
-- [ ] Servidor FastAPI con rutas que devuelvan datos de prueba, para conectar
-      el front antes de tener CST.
-- [ ] `CSTSession`: generador de VBA portado de `CST_MicrowaveStudio.m`
-      (polígonos, materiales, puertos, fronteras, monitores).
+- [x] Servidor FastAPI con rutas que devuelven datos de prueba, para conectar
+      el front antes de tener CST (sección 4.7).
+- [ ] `CSTSimulator`: el adaptador de CST, con el mismo método `run` que
+      `MockSimulator` (sección 4.7). Genera el VBA portado de
+      `CST_MicrowaveStudio.m` (polígonos, materiales, puertos, fronteras,
+      monitores) a partir de `gielis_api/geometry.py`, simula y lee los
+      parámetros S.
 - [ ] Modo absorbente de punta a punta: geometría → CST → simulación →
       resultados.
 - [ ] Modos transmisor y sensor.
-- [ ] Cola de simulaciones (una a la vez, porque CST usa una licencia).
+- [x] Cola de simulaciones (una a la vez, porque CST usa una licencia).
 
 **Validación y cierre**
 
@@ -808,6 +914,9 @@ etapa.
 | La librería de CST no importa | Python 3.14 no es compatible con CST 2025 | Usar Python 3.12 |
 | `npm install` avisa "10 moderate severity vulnerabilities" | Son avisos de paquetes que solo se usan para desarrollar (Vite, Vitest y sus dependencias), no de la página publicada | No usar `npm audit fix --force`, que puede instalar versiones incompatibles. Revisar de vez en cuando con `npm audit` y actualizar con `npm update` |
 | `npm test` dice que no encuentra `vitest` | Vitest no está instalado | `npm install -D vitest` (una sola vez) |
+| La vista *Resultados* dice "Servidor apagado" | El servidor no está corriendo, o se cerró su terminal | En otra terminal: `cd backend`, `.venv\Scripts\activate`, `uvicorn gielis_api.main:app --reload`. La página lo encuentra sola en 5 s |
+| `uvicorn` no se reconoce | Faltan las dependencias del servidor | Con el `.venv` activado: `python -m pip install -e ".[api,test]"` |
+| El navegador muestra un error de CORS | La página está en una dirección que el servidor no conoce | Agregarla en `DEFAULT_ORIGINS` de `gielis_api/main.py`, o con `$env:GIELIS_CORS_ORIGINS` |
 | `test_golden_geometry_regression` falla en el sensor | Los valores de referencia son de antes de la corrección del ángulo | `python tools/update_golden.py`, revisar el cambio con `git diff` y volver a correr `pytest` |
 
 ---
