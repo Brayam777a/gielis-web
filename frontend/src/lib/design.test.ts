@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { analyzeDesign, fitToSubstrate, toInputs } from './design.ts'
+import { analyzeDesign, FIELD_GROUPS, fitToSubstrate, toInputs } from './design.ts'
 import { EXAMPLES } from './examples.ts'
 import { readBackendJson, rel } from './testing.ts'
 
@@ -54,6 +54,17 @@ describe('validación', () => {
     expect(analyzeDesign({ ...base, monitor_freq_ghz: '9' }, 'absorber', 'normal').errors.monitor_freq_ghz).toBeTruthy()
     const ok = analyzeDesign({ ...base, monitor_freq_ghz: '2.4' }, 'absorber', 'normal')
     expect(ok.caseRequest!.field_monitors).toEqual({ fields: 'E', freq_ghz: 2.4 })
+  })
+
+  it('m sube de 1 en 1 en el selector y rechaza centésimas como 6.01 o 2.01', () => {
+    const gielisGroup = FIELD_GROUPS.find((g) => g.title === 'Curva de Gielis')!
+    const mConfig = gielisGroup.fields.find((f) => f.key === 'm')!
+    expect(mConfig.min).toBe(1)
+    expect(mConfig.step).toBe(1)
+
+    const bad = analyzeDesign({ ...toInputs(EXAMPLES.absorber), m: '6.01' }, 'absorber', 'normal')
+    expect(bad.errors.m).toBeTruthy()
+    expect(bad.caseRequest).toBeNull()
   })
 })
 

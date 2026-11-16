@@ -17,6 +17,23 @@ ABSORBER_CROSSPOL_CANDIDATES: tuple[str, ...] = (
     "SZmax(2),Zmax(1)",
     "SZmax(2)Zmax(1)",
 )
+TRANSMITTER_S21_CANDIDATES: tuple[str, ...] = (
+    "SZmin(1),Zmax(1)",
+    "SZmin(1)Zmax(1)",
+    "SZmin,Zmax",
+    "S2,1",
+    "S21",
+    "SZmax(1),Zmin(1)",
+)
+SENSOR_S21_CANDIDATES: tuple[str, ...] = (
+    "S2,1",
+    "S21",
+    "SZmin(1),Zmax(1)",
+)
+SENSOR_S11_CANDIDATES: tuple[str, ...] = (
+    "S1,1",
+    "S11",
+)
 
 _S_PREFIXES = ("1D Results\\S-Parameters\\", "1D Results/S-Parameters/")
 _EXCLUDED_SEGMENTS = ("Adaptive Meshing", "Convergence")

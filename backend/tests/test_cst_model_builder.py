@@ -233,3 +233,101 @@ def test_setup_absorber_simulation_configures_solver_boundaries_floquet_and_moni
         h_vba = vba_by_title["define field monitor: h-field (f=2.435)"]
         assert '.FieldType "Hfield"' in h_vba
         assert '.Frequency "2.435"' in h_vba
+
+
+def test_build_sensor_and_setup_records_csrr_bridges_line_and_waveguide_ports() -> None:
+    case = CaseRequest.model_validate(CASES["sensor"])
+    geometry = build_case_geometry(case)
+    assert geometry.bridge1 is not None and geometry.bridge2 is not None
+    project = _FakeProject()
+
+    builder = CSTModelBuilder(project)
+    builder.build_sensor(case, geometry)
+    builder.setup_sensor_simulation(case)
+
+    titles = [title for title, _ in project.model3d.history]
+    expected_build_titles = [
+        "Gielis: define units",
+        "Gielis: define vacuum background",
+        "Gielis: material Gielis_Dielectric",
+        "Gielis: material Gielis_Copper",
+        "Gielis: create brick Gielis_Substrate",
+        "Gielis: create brick Gielis_Ground",
+        "Gielis: extrude polygon Ring1_Outer",
+        "Gielis: extrude polygon Ring1_Inner",
+        "Gielis: subtract Ring1_Inner from Ring1_Outer",
+        "Gielis: extrude polygon Split_Bridge_Ring1",
+        "Gielis: subtract Split_Bridge_Ring1 from Ring1_Outer",
+        "Gielis: extrude polygon Ring2_Outer",
+        "Gielis: extrude polygon Ring2_Inner",
+        "Gielis: subtract Ring2_Inner from Ring2_Outer",
+        "Gielis: extrude polygon Split_Bridge_Ring2",
+        "Gielis: subtract Split_Bridge_Ring2 from Ring2_Outer",
+        "Gielis: subtract Ring1_Outer from Gielis_Ground",
+        "Gielis: subtract Ring2_Outer from Gielis_Ground",
+        "Gielis: create brick Microstrip_Line",
+    ]
+    assert titles[: len(expected_build_titles)] == expected_build_titles
+    assert titles[len(expected_build_titles) :] == [
+        "change solver type",
+        "SetFrequency",
+        "define boundaries",
+        "define waveguide port: 1",
+        "define waveguide port: 2",
+    ]
+
+    vba_by_title = dict(project.model3d.history)
+    line_vba = vba_by_title["Gielis: create brick Microstrip_Line"]
+    assert '.Xrange "-10", "10"' in line_vba
+    assert '.Yrange "-1.5", "1.5"' in line_vba
+    assert '.Zrange "1.6", "1.635"' in line_vba
+
+    bounds_vba = vba_by_title["define boundaries"]
+    for side in ("Xmin", "Xmax", "Ymin", "Ymax", "Zmin", "Zmax"):
+        assert f'.{side} "expanded open"' in bounds_vba
+
+    port1_vba = vba_by_title["define waveguide port: 1"]
+    assert '.Orientation "xmin"' in port1_vba
+    assert '.Xrange "-10", "-10"' in port1_vba
+    port2_vba = vba_by_title["define waveguide port: 2"]
+    assert '.Orientation "xmax"' in port2_vba
+    assert '.Xrange "10", "10"' in port2_vba
+
+
+def test_build_sensor_rejects_resonator_outside_substrate() -> None:
+    payload = copy.deepcopy(CASES["sensor"])
+    payload["concentric"]["dx_mm"] = 10.0
+    case = CaseRequest.model_validate(payload)
+    geometry = build_case_geometry(case)
+
+    with pytest.raises(ValueError, match="sale del sustrato"):
+        CSTModelBuilder(_FakeProject()).build_sensor(case, geometry)
+
+
+@pytest.mark.parametrize("structure_type", ["normal", "complementary"])
+def test_build_transmitter_supports_normal_and_complementary(structure_type: str) -> None:
+    payload = copy.deepcopy(CASES["transmitter"])
+    payload["structure_type"] = structure_type
+    case = CaseRequest.model_validate(payload)
+    geometry = build_case_geometry(case)
+    project = _FakeProject()
+
+    builder = CSTModelBuilder(project)
+    builder.build_transmitter(case, geometry)
+    builder.setup_transmitter_simulation(case)
+
+    titles = [title for title, _ in project.model3d.history]
+    assert "Gielis: create brick Gielis_Ground" not in titles
+    assert "Gielis: material Gielis_Copper" not in titles
+    if structure_type == "normal":
+        assert "Gielis: create brick Complementary_Top_Copper" not in titles
+        assert "Gielis: subtract Ring1_Inner from Ring1_Outer" in titles
+        assert "Gielis: subtract Ring2_Inner from Ring2_Outer" in titles
+    else:
+        assert "Gielis: create brick Complementary_Top_Copper" in titles
+        assert "Gielis: subtract Ring1_Outer from Complementary_Top_Copper" in titles
+        assert "Gielis: subtract Ring2_Outer from Complementary_Top_Copper" in titles
+
+    vba_by_title = dict(project.model3d.history)
+    assert '.Port "Zmin"' in vba_by_title["define Floquet Port boundaries"]
+    assert '.Port "Zmax"' in vba_by_title["define Floquet Port boundaries"]

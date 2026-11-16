@@ -217,3 +217,87 @@ def test_create_app_with_cst_env_var_reports_cst_health(monkeypatch: pytest.Monk
         r = client.get("/api/health")
         assert r.status_code == 200
         assert r.json()["simulator"] == "cst"
+
+
+def test_cst_simulator_run_sensor_end_to_end_with_fakes(tmp_path: Path) -> None:
+    case = CaseRequest.model_validate(CASES["sensor"])
+    freq = np.linspace(1.0, 8.0, 701)
+    dip = 0.85 / (1 + ((freq - 4.171) / 0.08) ** 2)
+    s21 = np.clip(1.0 - dip, 0.05, 1.0) * np.exp(-1j * 0.3 * freq)
+    s11 = np.full_like(freq, 0.15, dtype=complex)
+
+    tree = [
+        "1D Results\\S-Parameters\\S1,1",
+        "1D Results\\S-Parameters\\S2,1",
+    ]
+    curves = {
+        "1D Results\\S-Parameters\\S1,1": (freq, s11),
+        "1D Results\\S-Parameters\\S2,1": (freq, s21),
+    }
+
+    project = _FakeProject()
+    results_3d = _FakeResults3D(tree_items=tree, direct_curves=curves)
+    sim = CSTSimulator(
+        runs_dir=tmp_path,
+        design_env_factory=lambda: _FakeDesignEnv(project),
+        results_file_factory=lambda _: _FakeResultsFile(results_3d),
+    )
+
+    result = sim.run(case, lambda stage, msg, p=None: None)
+
+    run_dirs = [p for p in tmp_path.iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "Gielis_Sensor.cst").is_file()
+
+    assert result.simulator == "cst"
+    assert result.absorption is None
+    assert result.s21_db is not None
+    assert result.s11_db is not None
+    assert any(r.parameter == "S21" and r.kind == "min" and abs(r.frequency_ghz - 4.171) < 0.02 for r in result.resonances)
+
+
+@pytest.mark.parametrize("structure_type", ["normal", "complementary"])
+def test_cst_simulator_run_transmitter_end_to_end_with_fakes(tmp_path: Path, structure_type: str) -> None:
+    payload = copy.deepcopy(CASES["transmitter"])
+    payload["structure_type"] = structure_type
+    case = CaseRequest.model_validate(payload)
+    freq = np.linspace(1.0, 8.0, 701)
+    if structure_type == "normal":
+        dip = 0.98 / (1 + ((freq - 3.114) / 0.08) ** 2)
+        s21 = np.clip(1.0 - dip, 0.01, 1.0) * np.exp(-1j * 0.2 * freq)
+    else:
+        passband = 0.96 / (1 + ((freq - 4.745) / 0.12) ** 2)
+        s21 = np.clip(0.03 + passband, 0.03, 0.99) * np.exp(-1j * 0.2 * freq)
+    s11 = np.sqrt(np.clip(1.0 - np.abs(s21) ** 2 - 0.02, 0.001, 1.0)) + 0j
+
+    tree = [
+        "1D Results\\S-Parameters\\SZmax(1),Zmax(1)",
+        "1D Results\\S-Parameters\\SZmin(1),Zmax(1)",
+    ]
+    curves = {
+        "1D Results\\S-Parameters\\SZmax(1),Zmax(1)": (freq, s11),
+        "1D Results\\S-Parameters\\SZmin(1),Zmax(1)": (freq, s21),
+    }
+
+    project = _FakeProject()
+    results_3d = _FakeResults3D(tree_items=tree, direct_curves=curves)
+    sim = CSTSimulator(
+        runs_dir=tmp_path,
+        design_env_factory=lambda: _FakeDesignEnv(project),
+        results_file_factory=lambda _: _FakeResultsFile(results_3d),
+    )
+
+    result = sim.run(case, lambda stage, msg, p=None: None)
+
+    run_dirs = [p for p in tmp_path.iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    assert (run_dirs[0] / "Gielis_Transmitter.cst").is_file()
+
+    assert result.simulator == "cst"
+    assert result.s21_db is not None
+    assert result.s11_db is not None
+    assert result.absorption is not None
+    if structure_type == "normal":
+        assert any(r.kind == "min" and abs(r.frequency_ghz - 3.114) < 0.02 for r in result.resonances)
+    else:
+        assert any(r.kind == "max" and abs(r.frequency_ghz - 4.745) < 0.02 for r in result.resonances)
