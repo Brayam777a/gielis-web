@@ -86,3 +86,26 @@ def test_cors_allows_the_dev_server(client):
         headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"},
     )
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://192.168.1.50:5173",
+        "http://100.85.10.20:5173",
+    ],
+)
+def test_cors_allows_lan_and_tailscale_origins(client, origin):
+    r = client.options(
+        "/api/simulations",
+        headers={"Origin": origin, "Access-Control-Request-Method": "POST"},
+    )
+    assert r.headers["access-control-allow-origin"] == origin
+
+
+def test_cors_blocks_unknown_external_origin(client):
+    r = client.options(
+        "/api/simulations",
+        headers={"Origin": "https://sitio-externo.com", "Access-Control-Request-Method": "POST"},
+    )
+    assert "access-control-allow-origin" not in r.headers

@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { API_URL, type JobDetail, type SimulationResult } from '../lib/api.ts'
+import { type JobDetail, type SimulationResult } from '../lib/api.ts'
 import { parseCaseFile, type LoadedCase } from '../lib/caseFile.ts'
 import type { CaseRequest } from '../lib/design.ts'
 import { MODE_NAMES } from '../lib/examples.ts'
@@ -52,7 +52,7 @@ function MainArea({ sim, currentCase }: Pick<Props, 'sim' | 'currentCase'>) {
         ) : (
           <>
             <p>
-              No hay respuesta del servidor en <code>{API_URL}</code>. Para encenderlo, en una terminal:
+              No hay respuesta del servidor en <code>{sim.apiUrl}</code>. Para encenderlo, en una terminal:
             </p>
             <pre className="results__code">
               {'cd backend\n.venv\\Scripts\\activate\nuvicorn gielis_api.main:app --reload'}
