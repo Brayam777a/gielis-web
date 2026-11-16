@@ -28,24 +28,16 @@ import cst.results
 from gielis_api.schemas import CaseRequest
 from gielis_api.geometry import build_case_geometry
 from gielis_api.cst.model_builder import CSTModelBuilder
+from gielis_api.cst.results_reader import (
+    ABSORBER_COPOL_CANDIDATES,
+    ABSORBER_CROSSPOL_CANDIDATES,
+    find_first_sparameter,
+    list_sparameter_paths,
+)
 
 
 def log(message: str) -> None:
     print(message, flush=True)
-
-
-def get_result(results_3d, candidates: list[str]):
-    for name in candidates:
-        path = f"1D Results\\S-Parameters\\{name}"
-        try:
-            item = results_3d.get_result_item(path)
-            x = np.asarray(item.get_xdata(), dtype=float).reshape(-1)
-            y = np.asarray(item.get_ydata(), dtype=complex).reshape(-1)
-            if len(x) and len(x) == len(y):
-                return name, x, y
-        except Exception:
-            pass
-    return None
 
 
 def main() -> int:
@@ -91,32 +83,9 @@ def main() -> int:
     log("Abriendo CST y construyendo el modelo...")
     design = cst.interface.DesignEnvironment()
     project = design.new_mws()
-    CSTModelBuilder(project).build_absorber(case, geometry)
-
-    # Configuración de simulación traducida de CST_MicrowaveStudio.m:
-    # setSolver('frequency'), setFreq(1, 8), setBoundaryCondition(...) y
-    # defineFloquetModes(2). Las caras Z son open add space (VBA: expanded open).
-    setup_history = [
-        ("change solver type", 'ChangeSolverType "HF Frequency Domain"'),
-        ("SetFrequency", 'Solver.FrequencyRange "1.000000", "8.000000"'),
-        ("define boundaries", '\n'.join([
-            "With Boundary", '.Xmin "unit cell"', '.Xmax "unit cell"',
-            '.Ymin "unit cell"', '.Ymax "unit cell"',
-            '.Zmin "expanded open"', '.Zmax "expanded open"', "End With"
-        ])),
-        ("define Floquet Port boundaries", '\n'.join([
-            "With FloquetPort", ".Reset", '.SetDialogTheta "0"', '.SetDialogPhi "0"',
-            '.SetPolarizationIndependentOfScanAnglePhi "0.0", "False"',
-            '.SetSortCode "+beta/pw"', '.SetCustomizedListFlag "False"',
-            '.Port "Zmin"', '.SetNumberOfModesConsidered "2"',
-            '.SetDistanceToReferencePlane "0.0"', '.SetUseCircularPolarization "False"',
-            '.Port "Zmax"', '.SetNumberOfModesConsidered "2"',
-            '.SetDistanceToReferencePlane "0.0"', '.SetUseCircularPolarization "False"',
-            "End With"
-        ])),
-    ]
-    for caption, vba in setup_history:
-        project.model3d.add_to_history(caption, vba)
+    builder = CSTModelBuilder(project)
+    builder.build_absorber(case, geometry)
+    builder.setup_absorber_simulation(case)
 
     project.save(str(cst_file))
     log(f"Proyecto y setup electromagnético guardados: {cst_file}")
@@ -129,25 +98,23 @@ def main() -> int:
 
     log("Extrayendo resultados 1D de CST...")
     result_3d = cst.results.ProjectFile(str(cst_file), allow_interactive=True).get_3d()
-    tree_items = list(result_3d.get_tree_items())
+    tree_items = [str(item) for item in result_3d.get_tree_items()]
     (run_dir / "cst_result_tree.txt").write_text(
-        "\n".join(str(item) for item in tree_items), encoding="utf-8"
+        "\n".join(tree_items), encoding="utf-8"
     )
 
-    co = get_result(result_3d, [
-        "SZmax(1),Zmax(1)", "SZmax(1)Zmax(1)", "SZmax,Zmax", "S1,1"
-    ])
+    co = find_first_sparameter(result_3d, ABSORBER_COPOL_CANDIDATES, tree_items)
     if co is None:
-        available = [str(item) for item in tree_items if "S-Parameters" in str(item)]
+        available = list_sparameter_paths(tree_items)
+        if not available:
+            available = [item for item in tree_items if "S-Parameter" in item]
         raise RuntimeError(
             "CST terminó, pero no se encontró la reflexión co-polarizada de Zmax. "
             "Consulta cst_result_tree.txt. Resultados S disponibles:\n" +
             "\n".join(available)
         )
 
-    cross = get_result(result_3d, [
-        "SZmax(2),Zmax(1)", "SZmax(2)Zmax(1)"
-    ])
+    cross = find_first_sparameter(result_3d, ABSORBER_CROSSPOL_CANDIDATES, tree_items)
 
     name_co, freq, s11 = co
     cross_values = None

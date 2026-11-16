@@ -46,18 +46,22 @@ DEFAULT_ORIGINS = [
 ]
 
 
-def _default_simulator() -> Simulator:
+def _default_simulator(runs_dir: Path | None = None) -> Simulator:
     kind = os.environ.get("GIELIS_SIMULATOR", "mock")
     if kind == "mock":
         return MockSimulator(step_delay=float(os.environ.get("GIELIS_MOCK_DELAY", "0.25")))
-    raise RuntimeError(f"Simulador desconocido: {kind!r}. Por ahora solo existe 'mock'.")
+    if kind == "cst":
+        from .cst.simulator import CSTSimulator
+
+        return CSTSimulator(runs_dir=runs_dir)
+    raise RuntimeError(f"Simulador desconocido: {kind!r}. Opciones: 'mock', 'cst'.")
 
 
 def create_app(simulator: Simulator | None = None, runs_dir: Path | None = None) -> FastAPI:
     """Las pruebas crean su propia app con un simulador rápido y una carpeta temporal."""
     if runs_dir is None:
         runs_dir = Path(os.environ.get("GIELIS_RUNS_DIR", Path(__file__).parents[1] / "runs"))
-    jobs = JobManager(simulator or _default_simulator(), runs_dir)
+    jobs = JobManager(simulator or _default_simulator(runs_dir), runs_dir)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
