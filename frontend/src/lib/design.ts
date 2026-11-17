@@ -70,7 +70,7 @@ export const FIELD_GROUPS: FieldGroup[] = [
     fields: [
       { key: 'a', label: 'a', math: true, hint: 'Escala en la dirección del coseno', min: 0.1, max: 10, step: 0.1 },
       { key: 'b', label: 'b', math: true, hint: 'Escala en la dirección del seno', min: 0.1, max: 10, step: 0.1 },
-      { key: 'm', label: 'm', math: true, hint: 'Simetría: cuántos lóbulos tiene la forma', min: 0.01, max: 20, step: 0.01 },
+      { key: 'm', label: 'm', math: true, hint: 'Simetría: cuántos lóbulos tiene la forma', min: 1, max: 20, step: 1 },
       { key: 'n1', label: 'n1', math: true, hint: 'Forma general: picos agudos o redondeados', min: 0.1, max: 20, step: 0.1 },
       { key: 'n2', label: 'n2', math: true, hint: 'Forma del término del coseno', min: -10, max: 20, step: 0.1 },
       { key: 'n3', label: 'n3', math: true, hint: 'Forma del término del seno', min: -10, max: 20, step: 0.1 },

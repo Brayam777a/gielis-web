@@ -695,6 +695,28 @@
   background: var(--danger);
 }
 
+.simulate__server-toggle {
+  display: inline;
+  margin-top: 0;
+  font-size: var(--step--1);
+}
+
+.simulate__server-form {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.simulate__server-input {
+  width: 210px;
+  padding: 4px 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--paper);
+  font-size: var(--step--1);
+}
+
 .button--primary {
   background: var(--mask);
   border-color: var(--mask);

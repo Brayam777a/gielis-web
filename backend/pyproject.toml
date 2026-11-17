@@ -12,7 +12,7 @@ dependencies = [
 ]
 
 [tool.setuptools]
-packages = ["gielis_geometry", "gielis_api"]
+packages = ["gielis_geometry", "gielis_api", "gielis_api.cst"]
 
 [project.optional-dependencies]
 # Servidor web: pip install -e ".[api,test]"

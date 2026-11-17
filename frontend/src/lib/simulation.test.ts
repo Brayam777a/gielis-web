@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { SimulationResult } from './api.ts'
+import { defaultApiUrl, getApiUrl, normalizeApiUrl, setApiUrl, type SimulationResult } from './api.ts'
 import { axisTicks, isFinished, nearestIndex, resultToCsv, sameJson } from './simulation.ts'
 
 describe('simulation', () => {
@@ -42,5 +42,39 @@ describe('simulation', () => {
     expect(nearestIndex(xs, 2.4)).toBe(1)
     expect(nearestIndex(xs, 2.6)).toBe(2)
     expect(nearestIndex(xs, 9)).toBe(3)
+  })
+
+  it('normaliza y recuerda la dirección del servidor CST', () => {
+    expect(normalizeApiUrl('  192.168.1.50:8000///  ')).toBe('http://192.168.1.50:8000')
+    expect(normalizeApiUrl('https://100.85.10.20:8000/')).toBe('https://100.85.10.20:8000')
+    expect(normalizeApiUrl('   ')).toBe(defaultApiUrl())
+
+    const saved = setApiUrl('100.85.10.20:8000/')
+    expect(saved).toBe('http://100.85.10.20:8000')
+
+    // En Node (sin window) devuelve el valor por defecto; con localStorage se conserva.
+    const store = new Map<string, string>()
+    const prevWindow = (globalThis as { window?: unknown }).window
+    ;(globalThis as { window?: unknown }).window = {
+      location: { protocol: 'http:', port: '5173', hostname: 'localhost', origin: 'http://localhost:5173' },
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v)
+        },
+        removeItem: (k: string) => {
+          store.delete(k)
+        },
+      },
+    }
+    try {
+      expect(setApiUrl('100.85.10.20:8000/')).toBe('http://100.85.10.20:8000')
+      expect(getApiUrl()).toBe('http://100.85.10.20:8000')
+      expect(setApiUrl('')).toBe('http://localhost:8000')
+      expect(getApiUrl()).toBe('http://localhost:8000')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+    }
   })
 })

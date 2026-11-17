@@ -32,6 +32,7 @@ from pathlib import Path
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse
+from fastapi.staticfiles import StaticFiles
 
 from . import __version__
 from .jobs import JobAlreadyFinished, JobManager, JobNotFound
@@ -45,19 +46,33 @@ DEFAULT_ORIGINS = [
     "https://brayam777a.github.io",  # la página publicada
 ]
 
+LOCAL_AND_TAILSCALE_ORIGIN_REGEX = (
+    r"^https?://("
+    r"localhost|127\.0\.0\.1|\[::1\]|"
+    r"10\.\d{1,3}\.\d{1,3}\.\d{1,3}|"
+    r"192\.168\.\d{1,3}\.\d{1,3}|"
+    r"172\.(1[6-9]|2\d|3[0-1])\.\d{1,3}\.\d{1,3}|"
+    r"100\.\d{1,3}\.\d{1,3}\.\d{1,3}"
+    r")(:\d+)?$"
+)
 
-def _default_simulator() -> Simulator:
+
+def _default_simulator(runs_dir: Path | None = None) -> Simulator:
     kind = os.environ.get("GIELIS_SIMULATOR", "mock")
     if kind == "mock":
         return MockSimulator(step_delay=float(os.environ.get("GIELIS_MOCK_DELAY", "0.25")))
-    raise RuntimeError(f"Simulador desconocido: {kind!r}. Por ahora solo existe 'mock'.")
+    if kind == "cst":
+        from .cst.simulator import CSTSimulator
+
+        return CSTSimulator(runs_dir=runs_dir)
+    raise RuntimeError(f"Simulador desconocido: {kind!r}. Opciones: 'mock', 'cst'.")
 
 
 def create_app(simulator: Simulator | None = None, runs_dir: Path | None = None) -> FastAPI:
     """Las pruebas crean su propia app con un simulador rápido y una carpeta temporal."""
     if runs_dir is None:
         runs_dir = Path(os.environ.get("GIELIS_RUNS_DIR", Path(__file__).parents[1] / "runs"))
-    jobs = JobManager(simulator or _default_simulator(), runs_dir)
+    jobs = JobManager(simulator or _default_simulator(runs_dir), runs_dir)
 
     @asynccontextmanager
     async def lifespan(_: FastAPI):
@@ -71,7 +86,8 @@ def create_app(simulator: Simulator | None = None, runs_dir: Path | None = None)
     origins = os.environ.get("GIELIS_CORS_ORIGINS")
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=origins.split(",") if origins else DEFAULT_ORIGINS,
+        allow_origins=[o.strip() for o in origins.split(",") if o.strip()] if origins else DEFAULT_ORIGINS,
+        allow_origin_regex=None if origins else LOCAL_AND_TAILSCALE_ORIGIN_REGEX,
         allow_methods=["GET", "POST"],
         allow_headers=["Content-Type"],
     )
@@ -108,6 +124,10 @@ def create_app(simulator: Simulator | None = None, runs_dir: Path | None = None)
             raise HTTPException(404, "No existe esa simulación.") from None
         except JobAlreadyFinished:
             raise HTTPException(409, "La simulación ya terminó.") from None
+
+    dist_dir = Path(__file__).parents[2] / "frontend" / "dist"
+    if (dist_dir / "index.html").is_file():
+        app.mount("/app", StaticFiles(directory=dist_dir, html=True), name="frontend")
 
     return app
 

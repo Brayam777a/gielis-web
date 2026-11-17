@@ -8,34 +8,139 @@ absorbente, transmisor y sensor). Reemplaza la interfaz de MATLAB App Designer.
 
 ```text
 gielis-web/
-|-- backend/    Python: geometría (GielisGeometryService) y, después, API FastAPI + CST
-|-- frontend/   React + TypeScript (Vite)
+|-- backend/
+|   |-- gielis_geometry/     Geometría Gielis, envolvente radial, C1–C4 y puentes CSRR
+|   |-- gielis_api/          API FastAPI, cola secuencial (JobManager) y MockSimulator
+|   |   `-- cst/             Integración CST 2025 (CSTModelBuilder, CSTSimulator, results_reader)
+|   |-- start_cst_server.ps1 Script de arranque en 1 paso para el PC con CST
+|   |-- run_absorber_reference.py  Script directo de referencia en CST (absorber)
+|   `-- export_cst_results.py      Exportador de curvas S de proyectos .cst a CSV
+|-- frontend/                React + TypeScript (Vite)
 `-- docs/
-    `-- DOCUMENTACION.md   Qué hemos hecho, qué falta y cómo funciona cada parte
+    `-- DOCUMENTACION.md     Qué hemos hecho, qué falta y cómo funciona cada parte
 ```
 
 ## Requisitos
 
-- Windows 64 bits con CST Studio Suite 2025 y licencia (solo para simular).
+- Windows 64 bits con **CST Studio Suite 2025** y licencia (solo en el PC servidor que ejecuta CST).
 - **Python 3.12** de 64 bits. Python 3.14 no funciona con la librería de CST 2025.
-- Node.js LTS (para el front).
+- **Node.js LTS** (para compilar o desarrollar el frontend).
 
-## Arranque rápido
+---
 
-```bash
-# backend
+## Escenario 1: Uso local en un solo PC (modo prueba `mock`, sin CST)
+
+Útil para diseñar, previsualizar geometrías y probar el flujo web sin necesitar licencia de CST:
+
+```powershell
+# Terminal 1: backend en modo prueba (mock)
 cd backend
 py -3.12 -m venv .venv
-.venv\Scripts\activate
-python -m pip install -e ".[api,test]"
-python -m pytest
-uvicorn gielis_api.main:app --reload   # servidor; déjalo abierto
+.\.venv\Scripts\python.exe -m pip install -e ".[api,test]"
+.\.venv\Scripts\python.exe -m pytest
+.\.venv\Scripts\python.exe -m uvicorn gielis_api.main:app --reload --port 8000
 
-# frontend, en otra terminal
+# Terminal 2: frontend Vite
 cd ..\frontend
 npm install
 npm run dev
 ```
+
+Abre en el navegador: `http://localhost:5173/`.
+
+---
+
+## Escenario 2: Conectar 2 o más computadores a 1 PC servidor con CST 2025
+
+Esta arquitectura permite que un laboratorio o equipo de trabajo conecte **N computadores clientes** (sin necesidad de instalar CST, Python ni Node.js en ellos) hacia **1 único PC con CST Studio Suite 2025**.
+
+```text
+PCs clientes (Navegador: PC A, PC 2, ..., PC N)
+         │
+         │ HTTP/JSON (Red local LAN o VPN Tailscale)
+         ▼
+PC Servidor con CST 2025 (PC B: Uvicorn + JobManager + CSTSimulator)
+         │  (cola secuencial: 1 simulación a la vez)
+         ▼
+CST Studio Suite 2025 (.cst, solver HF Frequency Domain, curvas S)
+```
+
+### Paso 1: Preparar y encender el PC Servidor (el que tiene CST 2025)
+
+1. Instala dependencias del backend y compila la página web (solo la primera vez o tras actualizar):
+
+   ```powershell
+   cd <ruta-del-repo>\gielis-web
+   git pull origin Rama-Miguel2
+
+   cd backend
+   py -3.12 -m venv .venv
+   .\.venv\Scripts\python.exe -m pip install -e ".[api,test]"
+
+   cd ..\frontend
+   npm install
+   npm run build
+   ```
+
+2. Arranca el servidor CST con un solo comando desde la raíz del repo:
+
+   ```powershell
+   cd <ruta-del-repo>\gielis-web
+   .\backend\start_cst_server.ps1
+   ```
+
+   *(Para probar sin lanzar CST, usa `.\backend\start_cst_server.ps1 -Simulator mock`).*
+
+   El script configura `PYTHONPATH` hacia `C:\Program Files (x86)\CST Studio Suite 2025\AMD64\python_cst_libraries`, activa `GIELIS_SIMULATOR=cst` e imprime las direcciones listas para usar, por ejemplo:
+
+   ```text
+   Direcciones disponibles para conectar desde otros PCs:
+     [LAN] http://10.2.4.40:8000/app/
+     [LAN API] http://10.2.4.40:8000
+     [Tailscale] http://100.85.10.20:8000/app/
+     [Tailscale API] http://100.85.10.20:8000
+   ```
+
+3. **Firewall de Windows (si los otros PCs no logran conectar al puerto `8000`):**
+   Ejecuta en PowerShell como **Administrador** en el PC servidor:
+
+   ```powershell
+   New-NetFirewallRule -DisplayName "Gielis CST Server" -Direction Inbound -Protocol TCP -LocalPort 8000 -Action Allow -Profile Private
+   ```
+
+### Paso 2: Conectar desde los PCs clientes
+
+Elige el caso según dónde estén ubicados los computadores:
+
+#### Caso A — Todos en la misma red local (LAN / WiFi del laboratorio)
+
+- **Opción más rápida (sin instalar nada en los clientes):**
+  Abre el navegador en cualquier PC y entra directamente a la URL `[LAN]` que imprimió el servidor:
+  `http://<IP-LAN-DEL-SERVIDOR>:8000/app/` (por ejemplo `http://10.2.4.40:8000/app/`).
+- **Opción desde Vite (`http://localhost:5173/`) o GitHub Pages:**
+  1. En la barra superior derecha haz clic en el botón **`Servidor: ...`**.
+  2. Escribe `http://<IP-LAN-DEL-SERVIDOR>:8000` y pulsa **Conectar**.
+  *(La dirección queda guardada en el navegador con `localStorage`, no hace falta crear archivos `.env.local`).*
+
+#### Caso B — Computadores en redes distintas (ej. PC A en casa ↔ PC B en universidad)
+
+Como las IPs privadas de redes distintas no son visibles entre sí y los túneles temporales cambian de URL o se bloquean en redes institucionales, usa **Tailscale** (red privada virtual gratuita entre tus propios dispositivos):
+
+1. Instala **Tailscale** en el **PC Servidor** y en cada **PC cliente** (`https://tailscale.com/download` o por consola):
+   ```powershell
+   winget install tailscale.tailscale
+   ```
+2. Inicia sesión con la misma cuenta (o red Tailscale compartida) en ambos equipos.
+3. Vuelve a ejecutar `.\backend\start_cst_server.ps1` en el PC Servidor; verás aparecer la IP fija `[Tailscale]` (`100.x.y.z`).
+4. Desde cualquier PC cliente, abre `http://<IP-TAILSCALE>:8000/app/` o introduce `http://<IP-TAILSCALE>:8000` en el botón **`Servidor: ...`** de la página.
+
+> **Seguridad:** No expongas FastAPI directamente a Internet sin autenticación ni túnel privado, ya que el servidor administra el acceso a tu licencia de CST.
+
+### Cómo funciona la cola multi-usuario (`JobManager`)
+
+- Aunque varios computadores envíen simulaciones al mismo tiempo, `JobManager` las ordena en una **cola secuencial** (1 simulación CST a la vez) para evitar choques de licencia o proyectos abiertos en CST Studio Suite.
+- Cada simulación crea su propia carpeta independiente en `backend/runs/cst_<fecha>_<modo>_<id>/` con `input.json`, `metadata.json`, `cst_result_tree.txt` y el proyecto `.cst`, sin sobrescribir corridas anteriores.
+- Cada cliente ve en **Resultados** el avance en tiempo real, el historial compartido del servidor y puede descargar los parámetros S en CSV o reabrir cualquier caso.
 
 ## Reglas de trabajo
 
