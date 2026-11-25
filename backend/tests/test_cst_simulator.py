@@ -301,3 +301,88 @@ def test_cst_simulator_run_transmitter_end_to_end_with_fakes(tmp_path: Path, str
         assert any(r.kind == "min" and abs(r.frequency_ghz - 3.114) < 0.02 for r in result.resonances)
     else:
         assert any(r.kind == "max" and abs(r.frequency_ghz - 4.745) < 0.02 for r in result.resonances)
+
+
+class _ClosableModel3D(_FakeModel3D):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__()
+        self._fail = fail
+        self.aborted = False
+        self.started = None
+        self.release = None
+
+    def run_solver(self) -> None:
+        super().run_solver()
+        if self.started is not None:
+            self.started.set()
+        if self.release is not None:
+            self.release.wait(5)
+        if self._fail:
+            raise RuntimeError("CST solver crash")
+
+    def abort_solver(self) -> None:
+        self.aborted = True
+        if self.release is not None:
+            self.release.set()
+
+
+class _ClosableProject(_FakeProject):
+    def __init__(self, fail: bool = False) -> None:
+        super().__init__()
+        self.model3d = _ClosableModel3D(fail=fail)
+        self.closed = False
+
+    def close(self) -> None:
+        self.closed = True
+
+
+def test_cst_simulator_closes_project_and_writes_error_txt_on_failure(tmp_path: Path) -> None:
+    case = CaseRequest.model_validate(CASES["absorber"])
+    project = _ClosableProject(fail=True)
+    sim = CSTSimulator(
+        runs_dir=tmp_path,
+        design_env_factory=lambda: _FakeDesignEnv(project),
+        results_file_factory=lambda _: _FakeResultsFile(_FakeResults3D([], {})),
+    )
+
+    with pytest.raises(RuntimeError, match="CST solver crash"):
+        sim.run(case, lambda stage, msg, p=None: None)
+
+    assert project.closed is True
+    assert sim._active_project is None
+    run_dirs = [p for p in tmp_path.iterdir() if p.is_dir()]
+    assert len(run_dirs) == 1
+    assert "CST solver crash" in (run_dirs[0] / "error.txt").read_text(encoding="utf-8")
+
+
+def test_cst_simulator_abort_active_stops_and_closes_active_project(tmp_path: Path) -> None:
+    import threading
+
+    case = CaseRequest.model_validate(CASES["absorber"])
+    project = _ClosableProject(fail=True)
+    project.model3d.started = threading.Event()
+    project.model3d.release = threading.Event()
+
+    sim = CSTSimulator(
+        runs_dir=tmp_path,
+        design_env_factory=lambda: _FakeDesignEnv(project),
+        results_file_factory=lambda _: _FakeResultsFile(_FakeResults3D([], {})),
+    )
+
+    err: list[Exception] = []
+
+    def runner() -> None:
+        try:
+            sim.run(case, lambda stage, msg, p=None: None)
+        except Exception as exc:
+            err.append(exc)
+
+    thread = threading.Thread(target=runner)
+    thread.start()
+    assert project.model3d.started.wait(5)
+    sim.abort_active()
+    thread.join(timeout=5)
+
+    assert project.model3d.aborted is True
+    assert project.closed is True
+    assert len(err) == 1

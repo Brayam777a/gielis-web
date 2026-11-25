@@ -17,6 +17,7 @@ from __future__ import annotations
 import json
 import queue
 import secrets
+import shutil
 import threading
 import traceback
 from dataclasses import dataclass, field
@@ -65,10 +66,23 @@ class JobAlreadyFinished(RuntimeError):
     pass
 
 
+class _TimedOut(Exception):
+    pass
+
+
 class JobManager:
-    def __init__(self, simulator: Simulator, runs_dir: Path | None = None) -> None:
+    def __init__(
+        self,
+        simulator: Simulator,
+        runs_dir: Path | None = None,
+        *,
+        max_runs: int | None = None,
+        job_timeout_s: float | None = None,
+    ) -> None:
         self.simulator = simulator
         self.runs_dir = runs_dir
+        self.max_runs = max_runs if max_runs is not None and max_runs > 0 else None
+        self.job_timeout_s = job_timeout_s if job_timeout_s is not None and job_timeout_s > 0 else None
         self._jobs: dict[str, Job] = {}
         self._lock = threading.Lock()
         self._queue: queue.Queue[str | None] = queue.Queue()
@@ -111,8 +125,13 @@ class JobManager:
         with self._lock:
             return sorted(self._jobs.values(), key=lambda j: j.created_at + j.id, reverse=True)
 
+    def queue_depth(self) -> int:
+        with self._lock:
+            return sum(1 for j in self._jobs.values() if j.status not in FINISHED)
+
     def cancel(self, job_id: str) -> Job:
         job = self.get(job_id)
+        was_running = False
         with self._lock:
             if job.status in FINISHED:
                 raise JobAlreadyFinished(job_id)
@@ -122,10 +141,23 @@ class JobManager:
                 self._finish(job, "cancelled", "Cancelada antes de empezar")
             else:
                 job.message = "Cancelando…"
+                was_running = True
+        if was_running:
+            self._abort_simulator()
         self._save(job)
+        if job.status in FINISHED:
+            self._prune_old_runs()
         return job
 
     # ----- el hilo de fondo -----
+
+    def _abort_simulator(self) -> None:
+        abort = getattr(self.simulator, "abort_active", None)
+        if callable(abort):
+            try:
+                abort()
+            except Exception:
+                pass
 
     def _work(self) -> None:
         while True:
@@ -138,7 +170,21 @@ class JobManager:
             self._run(job)
 
     def _run(self, job: Job) -> None:
+        timed_out = threading.Event()
+        timer: threading.Timer | None = None
+        if self.job_timeout_s is not None:
+            def _on_timeout() -> None:
+                timed_out.set()
+                job.cancel_requested.set()
+                self._abort_simulator()
+
+            timer = threading.Timer(self.job_timeout_s, _on_timeout)
+            timer.daemon = True
+            timer.start()
+
         def progress(stage: str, message: str, value: float | None = None) -> None:
+            if timed_out.is_set():
+                raise _TimedOut
             if job.cancel_requested.is_set():
                 raise Cancelled
             with self._lock:
@@ -149,21 +195,40 @@ class JobManager:
 
         try:
             result = self.simulator.run(job.case, progress)
+        except _TimedOut:
+            with self._lock:
+                self._finish(job, "failed", "Falló", error=f"Tiempo límite excedido ({self.job_timeout_s:g} s).")
         except Cancelled:
             with self._lock:
-                self._finish(job, "cancelled", "Cancelada")
+                if timed_out.is_set() and self.job_timeout_s is not None:
+                    self._finish(job, "failed", "Falló", error=f"Tiempo límite excedido ({self.job_timeout_s:g} s).")
+                else:
+                    self._finish(job, "cancelled", "Cancelada")
         except ValueError as exc:  # geometría o datos inválidos: un mensaje claro
             with self._lock:
                 self._finish(job, "failed", "Falló", error=str(exc))
         except Exception as exc:  # cualquier otra cosa: se guarda el detalle
-            traceback.print_exc()
-            with self._lock:
-                self._finish(job, "failed", "Falló", error=f"{type(exc).__name__}: {exc}")
+            if timed_out.is_set() and self.job_timeout_s is not None:
+                with self._lock:
+                    self._finish(job, "failed", "Falló", error=f"Tiempo límite excedido ({self.job_timeout_s:g} s).")
+            else:
+                traceback.print_exc()
+                with self._lock:
+                    self._finish(job, "failed", "Falló", error=f"{type(exc).__name__}: {exc}")
         else:
             with self._lock:
-                job.result = result
-                self._finish(job, "done", "Terminada", progress=100)
+                if timed_out.is_set() and self.job_timeout_s is not None:
+                    self._finish(job, "failed", "Falló", error=f"Tiempo límite excedido ({self.job_timeout_s:g} s).")
+                elif job.cancel_requested.is_set():
+                    self._finish(job, "cancelled", "Cancelada")
+                else:
+                    job.result = result
+                    self._finish(job, "done", "Terminada", progress=100)
+        finally:
+            if timer is not None:
+                timer.cancel()
         self._save(job)
+        self._prune_old_runs()
 
     @staticmethod
     def _finish(job: Job, status: str, message: str, *, error: str | None = None,
@@ -203,3 +268,32 @@ class JobManager:
                 self._save(job)
             else:
                 self._jobs[job.id] = job
+        self._prune_old_runs()
+
+    def _prune_old_runs(self) -> None:
+        if self.max_runs is None:
+            return
+        with self._lock:
+            finished = [
+                (idx, job)
+                for idx, job in enumerate(self._jobs.values())
+                if job.status in FINISHED
+            ]
+            excess = len(finished) - self.max_runs
+            if excess <= 0:
+                removed_ids: list[str] = []
+            else:
+                oldest = sorted(finished, key=lambda pair: (pair[1].finished_at or pair[1].created_at, pair[0]))
+                removed_ids = [job.id for _, job in oldest[:excess]]
+                for job_id in removed_ids:
+                    self._jobs.pop(job_id, None)
+        if self.runs_dir is None:
+            return
+        for job_id in removed_ids:
+            shutil.rmtree(self.runs_dir / job_id, ignore_errors=True)
+        cst_dirs = sorted(
+            (p for p in self.runs_dir.iterdir() if p.is_dir() and p.name.startswith("cst_")),
+            key=lambda p: p.stat().st_mtime,
+        )
+        for old_cst in cst_dirs[: max(0, len(cst_dirs) - self.max_runs)]:
+            shutil.rmtree(old_cst, ignore_errors=True)

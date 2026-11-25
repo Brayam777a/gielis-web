@@ -3,7 +3,9 @@ from __future__ import annotations
 
 import json
 import secrets
+import threading
 import time
+import traceback
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Callable
@@ -13,7 +15,7 @@ import numpy as np
 from ..geometry import build_case_geometry
 from ..results import absorption, db, find_resonances
 from ..schemas import CaseRequest, SimulationResult
-from ..simulator import Progress
+from ..simulator import Cancelled, Progress
 from .model_builder import CSTModelBuilder
 from .results_reader import (
     ABSORBER_COPOL_CANDIDATES,
@@ -72,6 +74,25 @@ class CSTSimulator:
         )
         self._design_env_factory = design_env_factory or _default_design_env
         self._results_file_factory = results_file_factory or _default_results_file
+        self._lock = threading.Lock()
+        self._active_project: Any | None = None
+
+    def abort_active(self) -> None:
+        """Intenta detener el solver y cerrar el proyecto CST activo si existe."""
+        with self._lock:
+            project = self._active_project
+        if project is None:
+            return
+        for target, method in (
+            (getattr(project, "model3d", None), "abort_solver"),
+            (project, "close"),
+        ):
+            fn = getattr(target, method, None) if target is not None else None
+            if callable(fn):
+                try:
+                    fn()
+                except Exception:
+                    pass
 
     def run(self, case: CaseRequest, progress: Progress) -> SimulationResult:
         if case.mode == "absorber" and case.structure_type != "normal":
@@ -87,63 +108,85 @@ class CSTSimulator:
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "input.json").write_text(case.model_dump_json(indent=2), encoding="utf-8")
 
-        progress("building", "Construyendo el modelo 3D en CST Studio Suite")
-        design = self._design_env_factory()
-        project = design.new_mws()
-        builder = CSTModelBuilder(project)
-        builder.build_case(case, geometry)
-        builder.setup_simulation(case)
+        project: Any | None = None
+        try:
+            progress("building", "Construyendo el modelo 3D en CST Studio Suite")
+            design = self._design_env_factory()
+            project = design.new_mws()
+            with self._lock:
+                self._active_project = project
 
-        cst_file = run_dir / f"Gielis_{case.mode.capitalize()}.cst"
-        project.save(str(cst_file))
+            builder = CSTModelBuilder(project)
+            builder.build_case(case, geometry)
+            builder.setup_simulation(case)
 
-        progress("simulating", "Ejecutando solver HF Frequency Domain en CST")
-        started = time.perf_counter()
-        project.model3d.run_solver()
-        elapsed_s = time.perf_counter() - started
-        project.save(str(cst_file))
+            cst_file = run_dir / f"Gielis_{case.mode.capitalize()}.cst"
+            project.save(str(cst_file))
 
-        results_3d = self._results_file_factory(str(cst_file)).get_3d()
-        tree_items = [str(item) for item in results_3d.get_tree_items()]
-        (run_dir / "cst_result_tree.txt").write_text("\n".join(tree_items), encoding="utf-8")
+            progress("simulating", "Ejecutando solver HF Frequency Domain en CST")
+            started = time.perf_counter()
+            project.model3d.run_solver()
+            elapsed_s = time.perf_counter() - started
+            project.save(str(cst_file))
+            progress("simulating", "Extrayendo resultados 1D de CST")
 
-        extracted = self._extract_mode_results(case, results_3d, tree_items, elapsed_s)
-        freq = extracted["freq"]
-        s11_db = extracted["s11_db"]
-        s21_db = extracted["s21_db"]
-        abs_curve = extracted["absorption"]
+            results_3d = self._results_file_factory(str(cst_file)).get_3d()
+            tree_items = [str(item) for item in results_3d.get_tree_items()]
+            (run_dir / "cst_result_tree.txt").write_text("\n".join(tree_items), encoding="utf-8")
 
-        resonances = find_resonances(case.mode, case.structure_type, freq, s11_db, s21_db, abs_curve)
-        progress("simulating", "Resultados CST extraídos", 100)
+            extracted = self._extract_mode_results(case, results_3d, tree_items, elapsed_s)
+            freq = extracted["freq"]
+            s11_db = extracted["s11_db"]
+            s21_db = extracted["s21_db"]
+            abs_curve = extracted["absorption"]
 
-        metadata = {
-            "simulator": "CST Studio Suite 2025",
-            "solver": "HF Frequency Domain",
-            "mode": case.mode,
-            "structure_type": case.structure_type,
-            "cst_project": str(cst_file),
-            "solver_duration_s": round(elapsed_s, 3),
-            "co_polar_channel": extracted["co_polar_channel"],
-            "cross_polar_channel": extracted["cross_polar_channel"],
-            "s11_channel": extracted["s11_channel"],
-            "s21_channel": extracted["s21_channel"],
-            "frequency_points": int(len(freq)),
-            "frequency_range_ghz": [float(np.min(freq)), float(np.max(freq))],
-        }
-        (run_dir / "metadata.json").write_text(
-            json.dumps(metadata, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+            resonances = find_resonances(case.mode, case.structure_type, freq, s11_db, s21_db, abs_curve)
+            progress("simulating", "Resultados CST extraídos", 100)
 
-        return SimulationResult(
-            simulator="cst",
-            frequency_ghz=_rounded(freq, 5),
-            s11_db=None if s11_db is None else _rounded(s11_db, 3),
-            s21_db=None if s21_db is None else _rounded(s21_db, 3),
-            absorption=None if abs_curve is None else _rounded(abs_curve, 4),
-            resonances=resonances,
-            notes=extracted["notes"],
-        )
+            metadata = {
+                "simulator": "CST Studio Suite 2025",
+                "solver": "HF Frequency Domain",
+                "mode": case.mode,
+                "structure_type": case.structure_type,
+                "cst_project": str(cst_file),
+                "solver_duration_s": round(elapsed_s, 3),
+                "co_polar_channel": extracted["co_polar_channel"],
+                "cross_polar_channel": extracted["cross_polar_channel"],
+                "s11_channel": extracted["s11_channel"],
+                "s21_channel": extracted["s21_channel"],
+                "frequency_points": int(len(freq)),
+                "frequency_range_ghz": [float(np.min(freq)), float(np.max(freq))],
+            }
+            (run_dir / "metadata.json").write_text(
+                json.dumps(metadata, indent=2, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            return SimulationResult(
+                simulator="cst",
+                frequency_ghz=_rounded(freq, 5),
+                s11_db=None if s11_db is None else _rounded(s11_db, 3),
+                s21_db=None if s21_db is None else _rounded(s21_db, 3),
+                absorption=None if abs_curve is None else _rounded(abs_curve, 4),
+                resonances=resonances,
+                notes=extracted["notes"],
+            )
+        except Cancelled:
+            raise
+        except Exception:
+            (run_dir / "error.txt").write_text(traceback.format_exc(), encoding="utf-8")
+            raise
+        finally:
+            with self._lock:
+                if self._active_project is project:
+                    self._active_project = None
+            if project is not None:
+                close = getattr(project, "close", None)
+                if callable(close):
+                    try:
+                        close()
+                    except Exception:
+                        pass
 
     @staticmethod
     def _extract_mode_results(

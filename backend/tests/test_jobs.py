@@ -234,3 +234,48 @@ def test_unfinished_job_is_marked_failed_after_restart(tmp_path):
     again = JobManager(MockSimulator(step_delay=0), tmp_path)
     assert again.get(job.id).status == "failed"
     assert "reinició" in again.get(job.id).error
+
+
+class AbortableSlowSimulator(BlockingSimulator):
+    def __init__(self):
+        super().__init__()
+        self.aborted = threading.Event()
+
+    def abort_active(self):
+        self.aborted.set()
+        self.release.set()
+
+
+def test_job_timeout_marks_failed_and_aborts_simulator(tmp_path):
+    sim = AbortableSlowSimulator()
+    jobs = JobManager(sim, tmp_path, job_timeout_s=0.05)
+    jobs.start()
+    try:
+        job = jobs.submit(case("absorber"))
+        assert wait_until_finished(jobs, job.id) == "failed"
+        finished = jobs.get(job.id)
+        assert finished.error is not None
+        assert "Tiempo límite" in finished.error
+        assert sim.aborted.is_set()
+    finally:
+        sim.release.set()
+        jobs.stop()
+
+
+def test_max_runs_prunes_oldest_finished_runs(tmp_path):
+    jobs = JobManager(MockSimulator(step_delay=0, points=11), tmp_path, max_runs=2)
+    jobs.start()
+    submitted_ids = []
+    try:
+        for mode in ("absorber", "transmitter", "sensor", "absorber"):
+            job = jobs.submit(case(mode))
+            submitted_ids.append(job.id)
+            assert wait_until_finished(jobs, job.id) == "done"
+    finally:
+        jobs.stop()
+
+    remaining = [j.id for j in jobs.list()]
+    assert len(remaining) == 2
+    assert set(remaining) == set(submitted_ids[-2:])
+    disk_dirs = {p.name for p in tmp_path.iterdir() if p.is_dir()}
+    assert disk_dirs == set(submitted_ids[-2:])
