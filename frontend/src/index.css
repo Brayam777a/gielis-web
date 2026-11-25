@@ -107,6 +107,5 @@ input {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
-    transform: none !important;
   }
 }

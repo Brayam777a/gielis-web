@@ -1305,3 +1305,12 @@
     min-height: 90px;
   }
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .button:active:not(:disabled),
+  .segmented__button:active:not(:disabled),
+  .board__tool:active,
+  .history__item:active:not(:disabled) {
+    transform: none;
+  }
+}
