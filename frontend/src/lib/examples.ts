@@ -85,3 +85,44 @@ export const EXAMPLES: Record<Mode, ExampleCase> = {
     line_width_mm: 3,
   },
 }
+
+export type PublishedReference = {
+  label: string
+  frequency_ghz: number
+  parameter: 'S11' | 'S21'
+  value_db?: number
+  absorption_pct?: number
+}
+
+/** Picos publicados en el manuscrito SoftwareX (Tabla 3 y Sección 3). */
+export const PUBLISHED_REFERENCES: Record<
+  Mode,
+  Partial<Record<StructureType, PublishedReference[]>>
+> = {
+  absorber: {
+    normal: [
+      { label: 'Resonancia 1 (artículo)', frequency_ghz: 2.435, parameter: 'S11', value_db: -16.87, absorption_pct: 97.9 },
+      { label: 'Resonancia 2 (artículo)', frequency_ghz: 3.849, parameter: 'S11', value_db: -10.26, absorption_pct: 90.6 },
+    ],
+  },
+  transmitter: {
+    normal: [
+      { label: 'Mínimo 1 (artículo)', frequency_ghz: 3.114, parameter: 'S21', value_db: -37.42 },
+      { label: 'Máximo (artículo)', frequency_ghz: 3.478, parameter: 'S21', value_db: -0.07 },
+      { label: 'Mínimo 2 (artículo)', frequency_ghz: 5.403, parameter: 'S21', value_db: -51.01 },
+    ],
+    complementary: [
+      { label: 'Mínimo (artículo)', frequency_ghz: 3.513, parameter: 'S21', value_db: -46.42 },
+      { label: 'Máximo (artículo)', frequency_ghz: 4.745, parameter: 'S21', value_db: -0.08 },
+    ],
+  },
+  sensor: {
+    complementary: [
+      { label: 'Resonancia base εr=1 (artículo)', frequency_ghz: 4.171, parameter: 'S21' },
+    ],
+  },
+}
+
+export function getPublishedReferences(mode: Mode, structure: StructureType): PublishedReference[] {
+  return PUBLISHED_REFERENCES[mode]?.[structure] ?? []
+}

@@ -1,4 +1,4 @@
-import { useEffect, useState, type PointerEvent } from 'react'
+import { useEffect, useRef, useState, type PointerEvent } from 'react'
 import { axisTicks, nearestIndex } from '../lib/simulation.ts'
 
 export type Series = {
@@ -10,6 +10,8 @@ export type Series = {
 
 export type Marker = { index: number; tone: Series['tone'] }
 
+export type ReferenceLine = { label: string; frequency_ghz: number }
+
 type Props = {
   title: string
   unit: string
@@ -18,6 +20,9 @@ type Props = {
   /** Límites del eje vertical; si no se dan, se calculan con los datos. */
   domain?: [number, number]
   markers?: Marker[]
+  references?: ReferenceLine[]
+  /** Nombre sugerido al exportar la gráfica como SVG. */
+  exportName?: string
   /** Punto bajo el mouse, compartido entre las gráficas. */
   hover: number | null
   onHover: (index: number | null) => void
@@ -45,8 +50,20 @@ function useSize() {
  * Gráfica de líneas contra la frecuencia, dibujada con SVG (sin librerías).
  * Al pasar el mouse marca la frecuencia más cercana en todas las gráficas.
  */
-export function ResultsChart({ title, unit, frequency, series, domain, markers = [], hover, onHover }: Props) {
+export function ResultsChart({
+  title,
+  unit,
+  frequency,
+  series,
+  domain,
+  markers = [],
+  references = [],
+  exportName,
+  hover,
+  onHover,
+}: Props) {
   const [ref, { width, height }] = useSize()
+  const svgRef = useRef<SVGSVGElement | null>(null)
 
   const fMin = frequency[0]
   const fMax = frequency[frequency.length - 1]
@@ -69,6 +86,46 @@ export function ResultsChart({ title, unit, frequency, series, domain, markers =
 
   const xTicks = axisTicks(fMin, fMax, 8)
   const yTicks = axisTicks(yMin, yMax, 5)
+  const hoverX = hover !== null ? x(frequency[hover]) : 0
+  const tipX = hoverX > M.left + plotW - 144 ? hoverX - 142 : hoverX + 8
+  const tipW = 134
+  const tipH = 12 + (1 + series.length) * 14
+
+  function exportChartSvg() {
+    if (!svgRef.current) return
+    const clone = svgRef.current.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const ns = 'http://www.w3.org/2000/svg'
+    const style = document.createElementNS(ns, 'style')
+    style.textContent = [
+      '.results-chart__bg{fill:#163a2c}',
+      '.results-chart__grid line{stroke:#e8e6d9;stroke-opacity:.14}',
+      '.results-chart__labels text{fill:#e8e6d9;fill-opacity:.75;font-size:12px;font-family:system-ui,sans-serif}',
+      '.results-chart__line{fill:none;stroke-width:2;stroke-linejoin:round}',
+      '.results-chart__line--s11,.results-chart__line--absorption{stroke:#e0a06a}',
+      '.results-chart__line--s21{stroke:#e8e6d9}',
+      '.results-chart__marker{fill:#163a2c}',
+      '.results-chart__ref line{stroke:#e8e6d9;stroke-opacity:.45;stroke-dasharray:4 4;stroke-width:1.25}',
+      '.results-chart__ref text{fill:#e8e6d9;fill-opacity:.72;font-size:11px;font-family:system-ui,sans-serif}',
+      '.results-chart__hover,.results-chart__tooltip{display:none}',
+    ].join('')
+    const bg = document.createElementNS(ns, 'rect')
+    bg.setAttribute('x', '0')
+    bg.setAttribute('y', '0')
+    bg.setAttribute('width', String(width))
+    bg.setAttribute('height', String(height))
+    bg.setAttribute('class', 'results-chart__bg')
+    clone.prepend(bg)
+    clone.prepend(style)
+    const filename = exportName ? (exportName.endsWith('.svg') ? exportName : `${exportName}.svg`) : 'gielis-grafica.svg'
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   return (
     <figure className="results-chart">
@@ -82,11 +139,15 @@ export function ResultsChart({ title, unit, frequency, series, domain, markers =
               {s.label}
             </span>
           ))}
+          <button type="button" className="link-button results-chart__export" onClick={exportChartSvg}>
+            Exportar SVG
+          </button>
         </span>
       </figcaption>
       <div className="results-chart__plot" ref={ref}>
         {width > 0 && height > 0 && (
           <svg
+            ref={svgRef}
             width={width}
             height={height}
             role="img"
@@ -120,6 +181,16 @@ export function ResultsChart({ title, unit, frequency, series, domain, markers =
             {series.map((s) => (
               <path key={s.label} d={path(s.values)} className={`results-chart__line results-chart__line--${s.tone}`} />
             ))}
+            {references
+              .filter((r) => r.frequency_ghz >= fMin && r.frequency_ghz <= fMax)
+              .map((r) => (
+                <g key={r.label} className="results-chart__ref" aria-hidden="true">
+                  <line x1={x(r.frequency_ghz)} x2={x(r.frequency_ghz)} y1={M.top} y2={M.top + plotH} />
+                  <text x={x(r.frequency_ghz) + 3} y={M.top + 11}>
+                    {r.frequency_ghz}
+                  </text>
+                </g>
+              ))}
             {markers.map((m) => {
               const s = series.find((ss) => ss.tone === m.tone)
               if (!s) return null
@@ -134,12 +205,29 @@ export function ResultsChart({ title, unit, frequency, series, domain, markers =
               )
             })}
             {hover !== null && (
-              <g className="results-chart__hover">
-                <line x1={x(frequency[hover])} x2={x(frequency[hover])} y1={M.top} y2={M.top + plotH} />
-                {series.map((s) => (
-                  <circle key={s.label} cx={x(frequency[hover])} cy={y(s.values[hover])} r={3.5} />
-                ))}
-              </g>
+              <>
+                <g className="results-chart__hover">
+                  <line x1={hoverX} x2={hoverX} y1={M.top} y2={M.top + plotH} />
+                  {series.map((s) => (
+                    <circle key={s.label} cx={hoverX} cy={y(s.values[hover])} r={3.5} />
+                  ))}
+                </g>
+                <g className="results-chart__tooltip" transform={`translate(${tipX}, ${M.top + 6})`} pointerEvents="none">
+                  <rect width={tipW} height={tipH} rx={5} />
+                  <text x={8} y={14} className="results-chart__tooltip-freq">
+                    f = {frequency[hover].toLocaleString('es-CO', { maximumFractionDigits: 3 })} GHz
+                  </text>
+                  {series.map((s, idx) => (
+                    <text key={s.label} x={8} y={28 + idx * 14}>
+                      {s.label.split(' ')[0]} ={' '}
+                      {s.values[hover].toLocaleString('es-CO', {
+                        maximumFractionDigits: unit === '%' ? 1 : 2,
+                      })}{' '}
+                      {unit}
+                    </text>
+                  ))}
+                </g>
+              </>
             )}
           </svg>
         )}

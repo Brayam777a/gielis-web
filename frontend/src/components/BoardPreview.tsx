@@ -21,6 +21,8 @@ type Props = {
   legend: LegendItem[]
   /** Descripción para lectores de pantalla. */
   description: string
+  /** Nombre sugerido al descargar el SVG. */
+  exportName?: string
   /** Sustrato (W × L, en mm): la vista se encuadra a él y se dibujan sus cotas. */
   frame?: { width: number; length: number }
   /** Si está, la figura se puede tomar con el mouse (o mover con las flechas). */
@@ -94,14 +96,51 @@ function computeView(layers: Layer[], frame: Props['frame']): View {
  * En SVG el eje y crece hacia abajo; por eso el grupo de la geometría usa
  * scale(1, -1): así la figura queda con el eje y hacia arriba, como en MATLAB.
  */
-export function BoardPreview({ layers, legend, description, frame, onMove }: Props) {
+export function BoardPreview({ layers, legend, description, exportName, frame, onMove }: Props) {
   const fitted = useMemo(() => computeView(layers, frame), [layers, frame])
   // Mientras se arrastra, el encuadre queda fijo para que la figura no "salte".
   const [lockedView, setLockedView] = useState<View | null>(null)
+  const [showGrid, setShowGrid] = useState(true)
+  const [showDims, setShowDims] = useState(true)
   const { halfX, halfY, step } = lockedView ?? fitted
   const drag = useRef<{ x: number; y: number; mmPerPx: number } | null>(null)
 
   const paths = useMemo(() => layers.map((l) => ({ ...l, d: toPath(l.contours, l.closed) })), [layers])
+  const svgRef = useRef<SVGSVGElement | null>(null)
+
+  function exportSvg() {
+    if (!svgRef.current) return
+    const clone = svgRef.current.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const ns = 'http://www.w3.org/2000/svg'
+    const style = document.createElementNS(ns, 'style')
+    style.textContent = [
+      '.board__bg{fill:#163a2c}',
+      '.board__substrate{fill:#1e4d3b;stroke:#c27c3e;stroke-width:1}',
+      '.board__copper{fill:#c27c3e;fill-rule:evenodd}',
+      '.board__trace{fill:#e0a06a;fill-opacity:.6;stroke:#e8e6d9;stroke-width:.8;stroke-dasharray:4 3}',
+      '.board__curve{fill:none;stroke:#e8e6d9;stroke-width:1.5;stroke-dasharray:4 3}',
+      '.board__grid{stroke:#e8e6d9;stroke-opacity:.1;stroke-width:1}',
+      '.board__axis{stroke:#e8e6d9;stroke-opacity:.28;stroke-width:1}',
+      '.board__dims line{stroke:#e8e6d9;stroke-width:1;stroke-opacity:.8}',
+      '.board__dims text{fill:#e8e6d9;font-family:system-ui,sans-serif}',
+    ].join('')
+    const bg = document.createElementNS(ns, 'rect')
+    bg.setAttribute('x', String(-halfX))
+    bg.setAttribute('y', String(-halfY))
+    bg.setAttribute('width', String(2 * halfX))
+    bg.setAttribute('height', String(2 * halfY))
+    bg.setAttribute('class', 'board__bg')
+    clone.prepend(bg)
+    clone.prepend(style)
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = exportName ?? 'gielis-placa.svg'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const gridX: number[] = []
   for (let v = Math.ceil(-halfX / step) * step; v <= halfX + 1e-9; v += step) gridX.push(Number(v.toFixed(10)))
@@ -152,7 +191,31 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
 
   return (
     <figure className="board">
+      <div className="board__toolbar" role="toolbar" aria-label="Opciones de la vista de placa">
+        <button
+          type="button"
+          className="board__tool"
+          aria-pressed={showGrid}
+          onClick={() => setShowGrid((v) => !v)}
+        >
+          Cuadrícula
+        </button>
+        {frame && (
+          <button
+            type="button"
+            className="board__tool"
+            aria-pressed={showDims}
+            onClick={() => setShowDims((v) => !v)}
+          >
+            Cotas
+          </button>
+        )}
+        <button type="button" className="board__tool board__tool--push" onClick={exportSvg}>
+          Exportar SVG
+        </button>
+      </div>
       <svg
+        ref={svgRef}
         className={onMove ? 'board__svg board__svg--movable' : 'board__svg'}
         viewBox={`${-halfX} ${-halfY} ${2 * halfX} ${2 * halfY}`}
         style={{ aspectRatio: `${2 * halfX} / ${2 * halfY}` }}
@@ -172,28 +235,30 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
             .map((p) => (
               <path key={p.id} className="board__substrate" d={p.d} />
             ))}
-          {gridX.map((v) => (
-            <line
-              key={`x${v}`}
-              className={v === 0 ? 'board__axis' : 'board__grid'}
-              x1={v}
-              y1={-halfY}
-              x2={v}
-              y2={halfY}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
-          {gridY.map((v) => (
-            <line
-              key={`y${v}`}
-              className={v === 0 ? 'board__axis' : 'board__grid'}
-              x1={-halfX}
-              y1={v}
-              x2={halfX}
-              y2={v}
-              vectorEffect="non-scaling-stroke"
-            />
-          ))}
+          {showGrid &&
+            gridX.map((v) => (
+              <line
+                key={`x${v}`}
+                className={v === 0 ? 'board__axis' : 'board__grid'}
+                x1={v}
+                y1={-halfY}
+                x2={v}
+                y2={halfY}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
+          {showGrid &&
+            gridY.map((v) => (
+              <line
+                key={`y${v}`}
+                className={v === 0 ? 'board__axis' : 'board__grid'}
+                x1={-halfX}
+                y1={v}
+                x2={halfX}
+                y2={v}
+                vectorEffect="non-scaling-stroke"
+              />
+            ))}
           {paths
             .filter((p) => p.kind !== 'substrate')
             .map((p) => (
@@ -201,7 +266,7 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
             ))}
         </g>
 
-        {frame && (
+        {frame && showDims && (
           <g className="board__dims" aria-hidden="true">
             {/* Ancho W, debajo del sustrato */}
             <line
@@ -261,7 +326,7 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
           </span>
         ))}
         {onMove && <span className="board__hint">Arrastra la figura para moverla</span>}
-        <span className="board__scale">Cada cuadro mide {formatMm(step)} mm</span>
+        {showGrid && <span className="board__scale">Cada cuadro mide {formatMm(step)} mm</span>}
       </figcaption>
     </figure>
   )

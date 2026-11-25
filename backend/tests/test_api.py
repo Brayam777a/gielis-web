@@ -46,7 +46,10 @@ def test_root_goes_to_docs(client):
 def test_health(client):
     r = client.get("/api/health")
     assert r.status_code == 200
-    assert r.json()["simulator"] == "mock"
+    body = r.json()
+    assert body["simulator"] == "mock"
+    assert body["auth_required"] is False
+    assert body["queue_depth"] == 0
 
 
 @pytest.mark.parametrize("name", ["absorber", "transmitter", "sensor"])
@@ -86,3 +89,58 @@ def test_cors_allows_the_dev_server(client):
         headers={"Origin": "http://localhost:5173", "Access-Control-Request-Method": "POST"},
     )
     assert r.headers["access-control-allow-origin"] == "http://localhost:5173"
+
+
+@pytest.mark.parametrize(
+    "origin",
+    [
+        "http://192.168.1.50:5173",
+        "http://100.85.10.20:5173",
+    ],
+)
+def test_cors_allows_lan_and_tailscale_origins(client, origin):
+    r = client.options(
+        "/api/simulations",
+        headers={"Origin": origin, "Access-Control-Request-Method": "POST"},
+    )
+    assert r.headers["access-control-allow-origin"] == origin
+
+
+def test_cors_blocks_unknown_external_origin(client):
+    r = client.options(
+        "/api/simulations",
+        headers={"Origin": "https://sitio-externo.com", "Access-Control-Request-Method": "POST"},
+    )
+    assert "access-control-allow-origin" not in r.headers
+
+
+def test_api_token_protects_simulation_routes(tmp_path):
+    app = create_app(MockSimulator(step_delay=0, points=51), tmp_path, api_token="secreto-gielis")
+    with TestClient(app) as c:
+        health = c.get("/api/health")
+        assert health.status_code == 200
+        assert health.json()["auth_required"] is True
+
+        assert c.get("/api/simulations").status_code == 401
+        assert c.post("/api/simulations", json=CASES["absorber"]).status_code == 401
+        assert c.post("/api/simulations", json=CASES["absorber"], headers={"X-API-Key": "malo"}).status_code == 401
+
+        created = c.post("/api/simulations", json=CASES["absorber"], headers={"X-API-Key": "secreto-gielis"})
+        assert created.status_code == 202
+        job_id = created.json()["id"]
+
+        listed = c.get("/api/simulations", headers={"Authorization": "Bearer secreto-gielis"})
+        assert listed.status_code == 200
+        assert listed.json()[0]["id"] == job_id
+
+        assert c.post(f"/api/simulations/{job_id}/cancel").status_code == 401
+
+        end = time.monotonic() + 10
+        while time.monotonic() < end:
+            detail = c.get(f"/api/simulations/{job_id}", headers={"X-API-Key": "secreto-gielis"})
+            assert detail.status_code == 200
+            if detail.json()["status"] == "done":
+                break
+            time.sleep(0.02)
+        else:
+            raise AssertionError("no terminó la simulación autenticada")

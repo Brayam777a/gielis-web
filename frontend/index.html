@@ -11,6 +11,12 @@
       rel="stylesheet"
     />
     <title>Gielis Web</title>
+    <script>
+      try {
+        var t = localStorage.getItem('gielis.theme');
+        if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+      } catch {}
+    </script>
   </head>
   <body>
     <div id="root"></div>

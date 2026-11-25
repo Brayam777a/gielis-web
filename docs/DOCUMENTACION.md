@@ -1,6 +1,6 @@
 # Documentación del proyecto Gielis Web
 
-Última actualización: 6 de noviembre de 2026.
+Última actualización: 24 de noviembre de 2026.
 
 Este documento explica qué es el proyecto, qué hemos hecho, qué falta y cómo
 funciona cada parte. Está pensado para leerse de principio a fin la primera
@@ -117,6 +117,8 @@ Repositorio en GitHub: <https://github.com/Brayam777a/gielis-web>
 | 06/11/2026 | **Servidor FastAPI** (`backend/gielis_api/`) con cola de simulaciones y **simulador de prueba** | Recibe el JSON del caso, construye la geometría real con `gielis_geometry` y devuelve curvas de prueba. Con la fórmula de anillo resonante, el absorbente da 2.477 GHz (artículo: 2.435) y el sensor 4.24 GHz (artículo: 4.171). 29 pruebas nuevas en Python |
 | 06/11/2026 | **Botón *Simular* y vista *Resultados*** en el front | Estado y avance de la simulación con opción de cancelar, gráficas de S11, S21 y absorción, resonancias, CSV, historial y aviso si el diseño cambió. 5 pruebas nuevas (46 en total) |
 | 06/11/2026 | Publicación automática del front en GitHub Pages | Cada `git push` a `main` corre pruebas, lint y build, y publica la página en `https://brayam777a.github.io/gielis-web/` |
+| 24/11/2026 | **Adaptador `CSTSimulator` completo** (absorbente, transmisor normal/complementario, sensor con puentes y puertos waveguide) + montaje multi-PC (LAN / Tailscale) y `/app/` servido desde FastAPI | Todo cubierto por pruebas unitarias con dobles de CST en `test_cst_simulator.py`; falta ejecutar y validar las curvas frente a CST 2025 real en el PC B |
+| 24/11/2026 | **Endurecimiento, lanzador 1-clic y pulido UI** (`GIELIS_API_TOKEN`, timeout + `abort_active()`, retención `max_runs`, `check_env.py`, `launch_gielis.ps1`, `GielisWeb.bat`, referencias SoftwareX, `Exportar SVG`, CI en GitHub Actions) | Backend, frontend y CI probados en local con `MockSimulator` |
 
 ---
 
@@ -825,12 +827,13 @@ En orden. Cada paso deja algo que funciona y se puede mostrar.
 - [x] tanδ del Rogers RO4003C: **0.0027**, como la app (decidido el
       06/11/2026). El 0.002 del JSON del artículo no se usa; el material
       `Gielis_Rogers_RO4003C` creado en CST debe pasar a 0.0027.
-- [ ] Publicar el front en GitHub Pages (`.github/workflows/pages.yml`), para
+- [x] Publicar el front en GitHub Pages (`.github/workflows/pages.yml`), para
       que el profesor lo abra desde cualquier PC.
 - [x] Comentario del profesor: acomodar el espacio de trabajo y ajustar la
       figura a las dimensiones. Falta que él confirme que es lo que pedía.
 - [x] Monitores de campo E y H a una frecuencia.
 - [x] Abrir un caso desde un archivo JSON.
+- [x] Referencias del artículo SoftwareX en gráficas/tabla y exportación SVG.
 - [x] Pruebas automáticas del front (Vitest): 41 pruebas.
 
 Con esto está hecho todo lo del front que no necesita el backend.
@@ -878,21 +881,20 @@ Con esto está hecho todo lo del front que no necesita el backend.
          bajo), y el sustrato del sensor es W = 20 mm en x por L = 13 mm en y.
 - [x] Servidor FastAPI con rutas que devuelven datos de prueba, para conectar
       el front antes de tener CST (sección 4.7).
-- [ ] `CSTSimulator`: el adaptador de CST, con el mismo método `run` que
-      `MockSimulator` (sección 4.7). Genera el VBA portado de
-      `CST_MicrowaveStudio.m` (polígonos, materiales, puertos, fronteras,
-      monitores) a partir de `gielis_api/geometry.py`, simula y lee los
-      parámetros S.
-- [ ] Modo absorbente de punta a punta: geometría → CST → simulación →
-      resultados.
-- [ ] Modos transmisor y sensor.
+- [x] `CSTSimulator`: adaptador de CST con los modos absorbente, transmisor
+      (normal y complementario) y sensor implementado y cubierto con pruebas
+      unitarias simuladas (`backend/gielis_api/cst/`), token opcional, timeout y
+      retención de ejecuciones.
+- [ ] Validación real en CST Studio Suite 2025 (PC B): correr absorbente,
+      transmisor y sensor contra el solver HF Frequency Domain real.
 - [x] Cola de simulaciones (una a la vez, porque CST usa una licencia).
 
 **Validación y cierre**
 
-- [ ] Comparar con los resultados del artículo; por ejemplo, el absorbente
-      debe resonar cerca de 2.435 GHz con S11 ≈ −16.87 dB.
-- [ ] Integrar front y backend, README final y demostración.
+- [ ] Comparar resultados reales de CST 2025 con el artículo; por ejemplo, el
+      absorbente debe resonar cerca de 2.435 GHz con S11 ≈ −16.87 dB.
+- [x] Integrar front y backend, lanzador 1-clic, comprobador de entorno, CI y
+      README detallado para presentación.
 
 **Cómo se comunicarán el front y el backend.** Cuando exista el servidor, el
 front le enviará el JSON del caso (sección 4.5) y recibirá la geometría y,

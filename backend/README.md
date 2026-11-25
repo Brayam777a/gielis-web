@@ -14,15 +14,24 @@ conectar CST.
 
 ## Servidor (`gielis_api`)
 
-Recibe el JSON del caso del front, lo pone en una cola (una simulación a la
-vez), construye la geometría con `gielis_geometry` y devuelve las curvas. Por
-ahora el simulador es de **prueba** (`MockSimulator`); el de CST tendrá el
-mismo método `run`. Detalle en `docs/DOCUMENTACION.md`, sección 4.7.
+Recibe el JSON del caso del front, lo pone en una cola secuencial (`JobManager`, una simulación a la vez), construye la geometría con `gielis_geometry` y devuelve las curvas. Detalle en `docs/DOCUMENTACION.md`, sección 4.7.
 
-```bash
+- **Modo prueba (`GIELIS_SIMULATOR=mock`, por defecto):** usa `MockSimulator` (geometría real, curvas sintéticas para validar UI/API sin CST).
+- **Modo CST 2025 real (`GIELIS_SIMULATOR=cst`):** usa `CSTSimulator` (`gielis_api/cst/`) para construir, simular en `HF Frequency Domain` y extraer resultados de **absorber**, **transmitter** y **sensor**.
+- Si existe `frontend/dist/index.html`, FastAPI sirve además la web compilada en `/app/` y permite peticiones CORS desde orígenes LAN y Tailscale (`100.x.y.z`).
+
+```powershell
+# Modo prueba (mock)
 python -m pip install -e ".[api,test]"
-uvicorn gielis_api.main:app --reload     # http://localhost:8000/docs
+.\.venv\Scripts\python.exe -m uvicorn gielis_api.main:app --reload     # http://localhost:8000/docs
+
+# Modo CST 2025 real (con salida LAN/Tailscale y /app/)
+.\start_cst_server.ps1
 ```
+
+Scripts auxiliares para CST 2025 (en `backend/`):
+- `run_absorber_reference.py`: ejecuta el caso absorber de referencia directo en CST y exporta CSV/JSON.
+- `export_cst_results.py`: exporta las curvas S disponibles de un proyecto `.cst` existente a CSV.
 
 ## Tests
 

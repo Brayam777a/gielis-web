@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import './App.css'
 import { BoardPreview, type Layer, type LegendItem } from './components/BoardPreview.tsx'
 import { CaseJson } from './components/CaseJson.tsx'
@@ -20,11 +20,40 @@ import { EXAMPLES, MODE_NAMES, type Mode, type StructureType } from './lib/examp
 import type { LoadedCase } from './lib/caseFile.ts'
 import { CURVE_SAMPLES, ENVELOPE_BINS } from './lib/gielis.ts'
 import { CONDUCTORS, DIELECTRICS, findDielectric } from './lib/materials.ts'
+import { applyTheme, getThemePreference, setThemePreference, type ThemePreference } from './lib/theme.ts'
 import { useSimulation } from './lib/useSimulation.ts'
 
 type View = 'structure' | 'curve' | 'results'
 
 const VIEW_NAMES: Record<View, string> = { structure: 'Estructura', curve: 'Curva', results: 'Resultados' }
+const THEME_OPTIONS: { id: ThemePreference; label: string }[] = [
+  { id: 'system', label: 'Sistema' },
+  { id: 'light', label: 'Claro' },
+  { id: 'dark', label: 'Oscuro' },
+]
+
+function groupSummary(title: string, inputs: Inputs): string {
+  switch (title) {
+    case 'Curva de Gielis':
+      return `m = ${inputs.m} · a = ${inputs.a}, b = ${inputs.b}`
+    case 'Anillos concéntricos':
+      return `gap ${inputs.gap_mm} mm · ${inputs.size1} / ${inputs.size2}`
+    case 'Sustrato': {
+      const name = findDielectric(inputs.dielectric)?.name ?? inputs.dielectric
+      return `${name} · ${inputs.width_mm}×${inputs.length_mm}×${inputs.thickness_mm} mm`
+    }
+    case 'Metal':
+      return `${inputs.conductor} · ${inputs.metal_thickness_mm} mm`
+    case 'Línea microstrip':
+      return `${inputs.line_width_mm} mm`
+    case 'Frecuencias':
+      return `${inputs.f_min_ghz}–${inputs.f_max_ghz} GHz`
+    case 'Monitores de campo':
+      return inputs.monitor_fields === 'none' ? 'Ninguno' : `${inputs.monitor_fields} · ${inputs.monitor_freq_ghz} GHz`
+    default:
+      return ''
+  }
+}
 
 const MODES: Mode[] = ['absorber', 'transmitter', 'sensor']
 const STRUCTURE_NAMES: Record<StructureType, string> = {
@@ -56,10 +85,19 @@ export default function App() {
   const [showCurve, setShowCurve] = useState(true)
   const [openGroups, setOpenGroups] = useState<Record<string, boolean>>(INITIALLY_OPEN)
   const [fitMessage, setFitMessage] = useState<string | null>(null)
+  const [theme, setTheme] = useState<ThemePreference>(() => getThemePreference())
   // dx y dy al empezar a arrastrar la figura (el arrastre suma a partir de ahí).
   const dragOrigin = useRef({ dx: 0, dy: 0 })
   // Servidor, simulación elegida e historial (lib/useSimulation.ts).
   const sim = useSimulation()
+
+  useEffect(() => {
+    applyTheme(theme)
+  }, [theme])
+
+  function selectTheme(next: ThemePreference) {
+    setTheme(setThemePreference(next))
+  }
 
   // En modo sensor la estructura siempre es complementaria (como en la app).
   const effectiveStructure: StructureType = mode === 'sensor' ? 'complementary' : structureType
@@ -144,6 +182,15 @@ export default function App() {
     setStructureType(EXAMPLES[mode].structure)
   }
 
+  function selectMode(nextMode: Mode) {
+    setMode(nextMode)
+    if (isArticleCase) {
+      setInputs(toInputs(EXAMPLES[nextMode]))
+      setStructureType(EXAMPLES[nextMode].structure)
+      setFitMessage(null)
+    }
+  }
+
   // Qué se dibuja en la placa según la vista elegida.
   const board = useMemo((): { layers: Layer[]; legend: LegendItem[]; description: string } | null => {
     if (view === 'curve') {
@@ -200,6 +247,24 @@ export default function App() {
       <header className="app__header">
         <h1 className="app__title">Gielis Web</h1>
         <p className="app__subtitle">Diseño de estructuras microstrip con la súperfórmula de Gielis</p>
+        <div className="app__header-right">
+          <span className="app__badge">
+            {MODE_NAMES[mode]} · {STRUCTURE_NAMES[effectiveStructure]}
+          </span>
+          <div className="segmented theme-switch" role="group" aria-label="Tema de color">
+            {THEME_OPTIONS.map((opt) => (
+              <button
+                key={opt.id}
+                type="button"
+                className="segmented__button"
+                aria-pressed={theme === opt.id}
+                onClick={() => selectTheme(opt.id)}
+              >
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        </div>
       </header>
 
       <main className="app__main">
@@ -213,7 +278,7 @@ export default function App() {
                   type="button"
                   className="segmented__button"
                   aria-pressed={mode === m}
-                  onClick={() => setMode(m)}
+                  onClick={() => selectMode(m)}
                 >
                   {MODE_NAMES[m]}
                 </button>
@@ -246,11 +311,12 @@ export default function App() {
           {FIELD_GROUPS.filter((g) => !g.sensorOnly || mode === 'sensor').map((group) => {
             const keys: FieldKey[] = [...group.fields.map((f) => f.key), ...(group.select ? [group.select] : [])]
             const errorCount = keys.filter((k) => errors[k]).length
+            const isOpenGroup = openGroups[group.title] ?? false
             return (
             <details
               className="panel__section group"
               key={group.title}
-              open={openGroups[group.title] ?? false}
+              open={isOpenGroup}
               onToggle={(e) => {
                 const isOpen = e.currentTarget.open
                 setOpenGroups((prev) => ({ ...prev, [group.title]: isOpen }))
@@ -258,10 +324,12 @@ export default function App() {
             >
               <summary className="group__summary">
                 <h2 className="panel__title group__title">{group.title}</h2>
-                {errorCount > 0 && (
+                {errorCount > 0 ? (
                   <span className="group__badge">
                     {errorCount === 1 ? '1 campo por corregir' : `${errorCount} campos por corregir`}
                   </span>
+                ) : (
+                  !isOpenGroup && <span className="group__summary-value">{groupSummary(group.title, inputs)}</span>
                 )}
               </summary>
               <div className="panel__fields">
@@ -378,6 +446,7 @@ export default function App() {
               layers={board.layers}
               legend={board.legend}
               description={board.description}
+              exportName={`gielis-${mode}-${effectiveStructure}.svg`}
               frame={
                 view === 'structure'
                   ? { width: Number(inputs.width_mm), length: Number(inputs.length_mm) }

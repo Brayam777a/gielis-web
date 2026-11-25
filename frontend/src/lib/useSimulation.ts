@@ -8,7 +8,19 @@
  * Los componentes solo leen lo que devuelve y llaman a sus funciones.
  */
 import { useCallback, useEffect, useState } from 'react'
-import { api, NetworkError, type Health, type JobDetail, type JobSummary } from './api.ts'
+import {
+  api,
+  getApiToken,
+  getApiUrl,
+  hasSavedApiUrl,
+  isServedByBackend,
+  NetworkError,
+  setApiToken,
+  setApiUrl,
+  type Health,
+  type JobDetail,
+  type JobSummary,
+} from './api.ts'
 import type { CaseRequest } from './design.ts'
 import { isFinished } from './simulation.ts'
 
@@ -19,12 +31,15 @@ export type ServerState =
   | { kind: 'offline'; message: string }
 
 /**
- * En tu PC (localhost) se busca el servidor apenas abre la página. En la
- * página publicada solo cuando alguien pulsa "Conectar": así el navegador no
- * le pide permisos de red local a quien solo quiere ver el diseño.
+ * En tu PC (localhost), cuando la app se sirve desde el propio FastAPI, o si ya
+ * configuraste la URL de tu servidor CST, se conecta al abrir la página. En la
+ * página publicada sin servidor guardado espera a que pulses "Conectar".
  */
 export const AUTO_CONNECT =
-  Boolean(import.meta.env.VITE_API_URL) || ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname)
+  Boolean(import.meta.env.VITE_API_URL) ||
+  hasSavedApiUrl() ||
+  isServedByBackend() ||
+  (typeof window !== 'undefined' && ['localhost', '127.0.0.1', '[::1]'].includes(window.location.hostname))
 
 const RETRY_MS = 5000
 const POLL_MS = 700
@@ -32,6 +47,8 @@ const POLL_MS = 700
 const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function useSimulation() {
+  const [apiUrl, setApiUrlState] = useState<string>(() => getApiUrl())
+  const [apiToken, setApiTokenState] = useState<string>(() => getApiToken())
   const [server, setServer] = useState<ServerState>(AUTO_CONNECT ? { kind: 'checking' } : { kind: 'idle' })
   // Cada vez que este número cambia se vuelve a preguntar por el servidor.
   const [attempt, setAttempt] = useState(AUTO_CONNECT ? 1 : 0)
@@ -78,7 +95,7 @@ export function useSimulation() {
     return () => {
       stop = true
     }
-  }, [online, historyVersion])
+  }, [online, historyVersion, apiToken])
 
   // 3. La simulación elegida: se consulta hasta que termina.
   useEffect(() => {
@@ -148,11 +165,27 @@ export function useSimulation() {
     setAttempt((n) => n + 1)
   }, [])
 
+  const setServerUrl = useCallback((nextUrl: string, nextToken?: string) => {
+    const normalized = setApiUrl(nextUrl)
+    setApiUrlState(normalized)
+    if (nextToken !== undefined) {
+      setApiTokenState(setApiToken(nextToken))
+    }
+    setError(null)
+    setSelectedId(null)
+    setJob(null)
+    setServer({ kind: 'checking' })
+    setAttempt((n) => n + 1)
+  }, [])
+
   // El historial se pide al empezar y al terminar; mientras tanto, la fila de
   // la simulación elegida toma el estado de la consulta más reciente.
   const liveHistory = job ? history.map((h) => (h.id === job.id ? { ...h, status: job.status } : h)) : history
 
   return {
+    apiUrl,
+    apiToken,
+    setServerUrl,
     server,
     connect,
     history: liveHistory,

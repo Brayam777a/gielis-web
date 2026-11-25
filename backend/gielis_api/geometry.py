@@ -27,6 +27,8 @@ class CaseGeometry:
     c3: np.ndarray
     c4: np.ndarray
     substrate: np.ndarray  # rectángulo W × L centrado en el origen
+    bridge1: np.ndarray | None = None
+    bridge2: np.ndarray | None = None
 
     @property
     def rings(self) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
@@ -67,10 +69,15 @@ def build_case_geometry(case: CaseRequest) -> CaseGeometry:
         dy_mm=0.0 if is_sensor else c.dy_mm,
     )
     rings = _SERVICE.build_concentric(envelope, params)
+    bridge1: np.ndarray | None = None
+    bridge2: np.ndarray | None = None
     if is_sensor:
         tx, ty = _SERVICE.sensor_centering_translation(list(rings), c.dx_mm, c.dy_mm)
         rings = tuple(_SERVICE.translate_contour(r, tx, ty) for r in rings)
+        csrr = _SERVICE.build_sensor_csrr(*rings, g_mm=c.gap_mm)
+        bridge1 = np.asarray(csrr.bridge1.exterior.coords, dtype=float)[:-1]
+        bridge2 = np.asarray(csrr.bridge2.exterior.coords, dtype=float)[:-1]
 
     w, l = case.substrate.width_mm, case.substrate.length_mm
     substrate = np.array([[-w / 2, -l / 2], [w / 2, -l / 2], [w / 2, l / 2], [-w / 2, l / 2]])
-    return CaseGeometry(envelope, *rings, substrate=substrate)
+    return CaseGeometry(envelope, *rings, substrate=substrate, bridge1=bridge1, bridge2=bridge2)

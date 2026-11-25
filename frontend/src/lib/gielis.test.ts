@@ -35,9 +35,10 @@ describe('matlabRat: igual que rat() de MATLAB', () => {
 })
 
 describe('validateParams', () => {
-  it('rechaza a, b o n1 en cero y m con más de 2 decimales', () => {
-    const e = validateParams({ a: 0, b: 1, m: 3.141, n1: 0, n2: 1, n3: 1 })
+  it('rechaza a, b o n1 en cero y m con centésimas (p. ej. 6.01 o 2.01)', () => {
+    const e = validateParams({ a: 0, b: 1, m: 6.01, n1: 0, n2: 1, n3: 1 })
     expect(Object.keys(e).sort()).toEqual(['a', 'm', 'n1'])
+    expect(validateParams({ a: 1, b: 1, m: 2.01, n1: 1, n2: 1, n3: 1 }).m).toBeTruthy()
   })
 
   it('acepta los tres casos del artículo', () => {

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import type { SimulationResult } from './api.ts'
+import { defaultApiUrl, getApiToken, getApiUrl, normalizeApiUrl, setApiToken, setApiUrl, type SimulationResult } from './api.ts'
+import { getPublishedReferences } from './examples.ts'
 import { axisTicks, isFinished, nearestIndex, resultToCsv, sameJson } from './simulation.ts'
+import { applyTheme, getThemePreference, setThemePreference } from './theme.ts'
 
 describe('simulation', () => {
   it('sabe qué estados ya no cambian', () => {
@@ -42,5 +44,114 @@ describe('simulation', () => {
     expect(nearestIndex(xs, 2.4)).toBe(1)
     expect(nearestIndex(xs, 2.6)).toBe(2)
     expect(nearestIndex(xs, 9)).toBe(3)
+  })
+
+  it('normaliza y recuerda la dirección del servidor CST', () => {
+    expect(normalizeApiUrl('  192.168.1.50:8000///  ')).toBe('http://192.168.1.50:8000')
+    expect(normalizeApiUrl('https://100.85.10.20:8000/')).toBe('https://100.85.10.20:8000')
+    expect(normalizeApiUrl('   ')).toBe(defaultApiUrl())
+
+    const saved = setApiUrl('100.85.10.20:8000/')
+    expect(saved).toBe('http://100.85.10.20:8000')
+
+    // En Node (sin window) devuelve el valor por defecto; con localStorage se conserva.
+    const store = new Map<string, string>()
+    const prevWindow = (globalThis as { window?: unknown }).window
+    ;(globalThis as { window?: unknown }).window = {
+      location: { protocol: 'http:', port: '5173', hostname: 'localhost', origin: 'http://localhost:5173' },
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v)
+        },
+        removeItem: (k: string) => {
+          store.delete(k)
+        },
+      },
+    }
+    try {
+      expect(setApiUrl('100.85.10.20:8000/')).toBe('http://100.85.10.20:8000')
+      expect(getApiUrl()).toBe('http://100.85.10.20:8000')
+      expect(setApiUrl('')).toBe('http://localhost:8000')
+      expect(getApiUrl()).toBe('http://localhost:8000')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+    }
+  })
+
+  it('guarda y limpia el token API en sessionStorage', () => {
+    expect(getApiToken()).toBe('')
+    const session = new Map<string, string>()
+    const prevWindow = (globalThis as { window?: unknown }).window
+    ;(globalThis as { window?: unknown }).window = {
+      sessionStorage: {
+        getItem: (k: string) => session.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          session.set(k, v)
+        },
+        removeItem: (k: string) => {
+          session.delete(k)
+        },
+      },
+    }
+    try {
+      expect(setApiToken('  mi-token  ')).toBe('mi-token')
+      expect(getApiToken()).toBe('mi-token')
+      expect(setApiToken('')).toBe('')
+      expect(getApiToken()).toBe('')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+    }
+  })
+
+  it('devuelve las referencias publicadas del artículo por modo y estructura', () => {
+    expect(getPublishedReferences('absorber', 'normal').map((r) => r.frequency_ghz)).toEqual([2.435, 3.849])
+    expect(getPublishedReferences('transmitter', 'normal').map((r) => r.frequency_ghz)).toEqual([3.114, 3.478, 5.403])
+    expect(getPublishedReferences('transmitter', 'complementary').map((r) => r.frequency_ghz)).toEqual([3.513, 4.745])
+    expect(getPublishedReferences('sensor', 'complementary').map((r) => r.frequency_ghz)).toEqual([4.171])
+  })
+
+  it('guarda y aplica la preferencia de tema (sistema, claro, oscuro)', () => {
+    expect(getThemePreference()).toBe('system')
+    const store = new Map<string, string>()
+    const dataset: Record<string, string> = {}
+    const prevWindow = (globalThis as { window?: unknown }).window
+    const prevDoc = (globalThis as { document?: unknown }).document
+    ;(globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v)
+        },
+        removeItem: (k: string) => {
+          store.delete(k)
+        },
+      },
+    }
+    ;(globalThis as { document?: unknown }).document = {
+      documentElement: { dataset },
+    }
+    try {
+      expect(setThemePreference('dark')).toBe('dark')
+      expect(getThemePreference()).toBe('dark')
+      expect(dataset.theme).toBe('dark')
+
+      expect(setThemePreference('light')).toBe('light')
+      expect(dataset.theme).toBe('light')
+
+      expect(setThemePreference('system')).toBe('system')
+      expect(getThemePreference()).toBe('system')
+      expect(dataset.theme).toBeUndefined()
+
+      applyTheme('dark')
+      expect(dataset.theme).toBe('dark')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+      if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document
+      else (globalThis as { document?: unknown }).document = prevDoc
+    }
   })
 })

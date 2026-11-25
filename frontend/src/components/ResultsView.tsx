@@ -1,8 +1,8 @@
 import { useState } from 'react'
-import { API_URL, type JobDetail, type SimulationResult } from '../lib/api.ts'
+import { type JobDetail, type SimulationResult } from '../lib/api.ts'
 import { parseCaseFile, type LoadedCase } from '../lib/caseFile.ts'
 import type { CaseRequest } from '../lib/design.ts'
-import { MODE_NAMES } from '../lib/examples.ts'
+import { getPublishedReferences, MODE_NAMES } from '../lib/examples.ts'
 import { isFinished, nearestIndex, resultToCsv, sameJson, shortTime, STATUS_LABEL } from '../lib/simulation.ts'
 import type { SimulationState } from '../lib/useSimulation.ts'
 import { ResultsChart, type Marker, type Series } from './ResultsChart.tsx'
@@ -52,7 +52,7 @@ function MainArea({ sim, currentCase }: Pick<Props, 'sim' | 'currentCase'>) {
         ) : (
           <>
             <p>
-              No hay respuesta del servidor en <code>{API_URL}</code>. Para encenderlo, en una terminal:
+              No hay respuesta del servidor en <code>{sim.apiUrl}</code>. Para encenderlo, en una terminal:
             </p>
             <pre className="results__code">
               {'cd backend\n.venv\\Scripts\\activate\nuvicorn gielis_api.main:app --reload'}
@@ -111,7 +111,10 @@ function MainArea({ sim, currentCase }: Pick<Props, 'sim' | 'currentCase'>) {
 
 function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResult; stale: boolean }) {
   const [hover, setHover] = useState<number | null>(null)
+  const [showRefs, setShowRefs] = useState(true)
   const f = result.frequency_ghz
+  const refs = getPublishedReferences(job.case.mode, job.case.structure_type)
+  const activeRefs = showRefs ? refs : []
 
   const sSeries: Series[] = []
   if (result.s11_db) sSeries.push({ label: 'S11', values: result.s11_db, tone: 's11' })
@@ -132,12 +135,22 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
           {stale && <li>El diseño cambió después de esta simulación ({shortTime(job.created_at)}).</li>}
         </ul>
       )}
+      {refs.length > 0 && (
+        <div className="results__toolbar">
+          <label className="results__toggle">
+            <input type="checkbox" checked={showRefs} onChange={(e) => setShowRefs(e.target.checked)} />
+            Mostrar picos de referencia del artículo
+          </label>
+        </div>
+      )}
       <ResultsChart
         title="Parámetros S"
         unit="dB"
         frequency={f}
         series={sSeries}
         markers={markers}
+        references={activeRefs}
+        exportName={`${job.id}-s-params.svg`}
         hover={hover}
         onHover={setHover}
       />
@@ -148,6 +161,8 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
           frequency={f}
           series={[{ label: result.s21_db ? 'A = 1 − |S11|² − |S21|²' : 'A = 1 − |S11|²', values: absorption, tone: 'absorption' }]}
           domain={[0, 100]}
+          references={activeRefs}
+          exportName={`${job.id}-absorcion.svg`}
           hover={hover}
           onHover={setHover}
         />
@@ -161,11 +176,41 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
               ...(absorption ? [`A = ${fmt(absorption[hover], 1)} %`] : []),
             ].join('   ·   ')}
       </p>
+      {result.simulator === 'cst' && result.notes.length > 0 && (
+        <ul className="results__notes">
+          {result.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
+function closestDeltaMhz(
+  freqGhz: number,
+  parameter: 'S11' | 'S21',
+  resonances: SimulationResult['resonances'],
+): string {
+  const candidates = resonances.filter((r) => r.parameter === parameter)
+  if (candidates.length === 0) return '—'
+  let best = candidates[0]
+  let bestDist = Math.abs(best.frequency_ghz - freqGhz)
+  for (const r of candidates) {
+    const d = Math.abs(r.frequency_ghz - freqGhz)
+    if (d < bestDist) {
+      best = r
+      bestDist = d
+    }
+  }
+  const mhz = Math.round((best.frequency_ghz - freqGhz) * 1000)
+  return `${mhz >= 0 ? '+' : '−'}${Math.abs(mhz)} MHz`
+}
+
 function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: SimulationResult; onLoadCase: (c: LoadedCase) => void }) {
+  const [copied, setCopied] = useState(false)
+  const refs = getPublishedReferences(job.case.mode, job.case.structure_type)
+
   function download() {
     const blob = new Blob([resultToCsv(result)], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -179,6 +224,23 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
   function loadCase() {
     const parsed = parseCaseFile(JSON.stringify(job.case))
     if (parsed.ok) onLoadCase(parsed.value)
+  }
+
+  async function copySummary() {
+    const lines = [
+      `Gielis Web · ${MODE_NAMES[job.case.mode]} (${job.case.structure_type}) · ${result.simulator.toUpperCase()}`,
+      ...result.resonances.map((r) => {
+        const a = r.absorption_pct !== null ? ` · A = ${fmt(r.absorption_pct, 1)} %` : ''
+        return `- ${fmt(r.frequency_ghz, 3)} GHz · ${r.parameter} = ${fmt(r.value_db)} dB${a}`
+      }),
+    ]
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // portapapeles no disponible
+    }
   }
 
   return (
@@ -210,10 +272,45 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
         <button type="button" className="button" onClick={download}>
           Descargar CSV
         </button>
+        <button type="button" className="button" onClick={() => void copySummary()}>
+          {copied ? 'Copiado' : 'Copiar resumen'}
+        </button>
         <button type="button" className="button" onClick={loadCase}>
           Cargar este caso
         </button>
       </div>
+      {refs.length > 0 && (
+        <div className="results__ref-section">
+          <h3 className="results__heading">Referencia del artículo (SoftwareX)</h3>
+          <table className="results__table">
+            <thead>
+              <tr>
+                <th scope="col">GHz</th>
+                <th scope="col">{refs[0].parameter} (dB)</th>
+                {refs.some((r) => r.absorption_pct !== undefined) && <th scope="col">A (%)</th>}
+                {result.resonances.length > 0 && <th scope="col">Δf</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {refs.map((r) => (
+                <tr key={r.label}>
+                  <td>{fmt(r.frequency_ghz, 3)}</td>
+                  <td>{r.value_db !== undefined ? fmt(r.value_db) : '—'}</td>
+                  {refs.some((x) => x.absorption_pct !== undefined) && (
+                    <td>{r.absorption_pct !== undefined ? fmt(r.absorption_pct, 1) : '—'}</td>
+                  )}
+                  {result.resonances.length > 0 && (
+                    <td className="results__delta">{closestDeltaMhz(r.frequency_ghz, r.parameter, result.resonances)}</td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {job.case.mode === 'sensor' && (
+            <p className="results__ref-note">Referencia Tabla 3 para gota con εr = 1 (baja a 3,821 GHz en εr = 70).</p>
+          )}
+        </div>
+      )}
     </section>
   )
 }
@@ -221,8 +318,11 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
 function History({ sim }: { sim: SimulationState }) {
   if (sim.history.length === 0) return null
   return (
-    <section aria-label="Historial">
-      <h2 className="results__heading">Historial</h2>
+    <details className="history-box" open>
+      <summary className="history-box__summary">
+        <span>Historial</span>
+        <span className="history-box__count">{sim.history.length}</span>
+      </summary>
       <ul className="history">
         {sim.history.slice(0, 30).map((h) => (
           <li key={h.id}>
@@ -239,6 +339,6 @@ function History({ sim }: { sim: SimulationState }) {
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   )
 }

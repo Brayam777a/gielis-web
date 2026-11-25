@@ -90,8 +90,8 @@ export function validateParams(p: GielisParams): ParamErrors {
   if (!errors.n1 && p.n1 === 0) errors.n1 = 'n1 debe ser distinto de cero.'
   if (!errors.m) {
     if (p.m <= 0) errors.m = 'm debe ser mayor que cero.'
-    else if (Math.abs(p.m * 100 - Math.round(p.m * 100)) > 1e-9)
-      errors.m = 'm admite hasta 2 decimales.'
+    else if (Math.abs(p.m * 10 - Math.round(p.m * 10)) > 1e-9)
+      errors.m = 'm no admite centésimas (usa enteros o a lo sumo 1 decimal).'
   }
   return errors
 }
