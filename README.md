@@ -8,11 +8,14 @@ absorbente, transmisor y sensor). Reemplaza la interfaz de MATLAB App Designer.
 
 ```text
 gielis-web/
+|-- launch_gielis.ps1        Lanzador en 1 paso (crea .venv, compila front, detecta CST y abre /app/)
+|-- GielisWeb.bat            Acceso directo doble clic en Windows (llama a launch_gielis.ps1)
 |-- backend/
 |   |-- gielis_geometry/     Geometría Gielis, envolvente radial, C1–C4 y puentes CSRR
 |   |-- gielis_api/          API FastAPI, cola secuencial (JobManager) y MockSimulator
 |   |   `-- cst/             Integración CST 2025 (CSTModelBuilder, CSTSimulator, results_reader)
-|   |-- start_cst_server.ps1 Script de arranque en 1 paso para el PC con CST
+|   |-- check_env.py         Diagnóstico rápido de Python, paquetes, frontend/dist y CST 2025
+|   |-- start_cst_server.ps1 Script de arranque del servidor en el PC con CST (o mock)
 |   |-- run_absorber_reference.py  Script directo de referencia en CST (absorber)
 |   `-- export_cst_results.py      Exportador de curvas S de proyectos .cst a CSV
 |-- frontend/                React + TypeScript (Vite)
@@ -28,7 +31,33 @@ gielis-web/
 
 ---
 
-## Escenario 1: Uso local en un solo PC (modo prueba `mock`, sin CST)
+## Arranque rápido en 1 clic (Windows)
+
+Haz doble clic en **`GielisWeb.bat`** (o ejecuta desde PowerShell en la raíz del repo):
+
+```powershell
+.\launch_gielis.ps1
+```
+
+El lanzador crea `backend\.venv` si falta, compila `frontend\dist`, verifica el entorno con `backend\check_env.py`, selecciona automáticamente `cst` (si detecta CST Studio Suite 2025) o `mock`, inicia el servidor y abre `http://127.0.0.1:8000/app/` en tu navegador.
+
+Opciones útiles:
+
+```powershell
+.\launch_gielis.ps1 -CheckOnly        # solo diagnostica requisitos y dependencias
+.\launch_gielis.ps1 -Mode mock        # fuerza simulador de prueba sin abrir CST
+.\launch_gielis.ps1 -Token "mi-clave" # protege /api/simulations* con X-API-Key / Bearer
+```
+
+Diagnóstico manual desde cualquier sistema operativo:
+
+```bash
+python backend/check_env.py
+```
+
+---
+
+## Escenario 1: Desarrollo local en un solo PC (modo prueba `mock`, sin CST)
 
 Útil para diseñar, previsualizar geometrías y probar el flujo web sin necesitar licencia de CST:
 
@@ -134,13 +163,16 @@ Como las IPs privadas de redes distintas no son visibles entre sí y los túnele
 3. Vuelve a ejecutar `.\backend\start_cst_server.ps1` en el PC Servidor; verás aparecer la IP fija `[Tailscale]` (`100.x.y.z`).
 4. Desde cualquier PC cliente, abre `http://<IP-TAILSCALE>:8000/app/` o introduce `http://<IP-TAILSCALE>:8000` en el botón **`Servidor: ...`** de la página.
 
-> **Seguridad:** No expongas FastAPI directamente a Internet sin autenticación ni túnel privado, ya que el servidor administra el acceso a tu licencia de CST.
+> **Seguridad, límites y retención:**
+> - Para proteger tu licencia de CST en redes compartidas, pasa un token al servidor (`.\backend\start_cst_server.ps1 -Token "tu-clave"` o `$env:GIELIS_API_TOKEN`) e ingrésalo en el botón **`Servidor: ...`** del navegador.
+> - Por defecto el backend aplica un tiempo límite de 30 minutos por simulación (`GIELIS_SIM_TIMEOUT_SECONDS=1800`), cierra el proyecto CST al terminar o fallar (guardando `error.txt` en la carpeta de la corrida) y conserva en disco las últimas 50 simulaciones (`GIELIS_MAX_RUNS=50`).
+> - No expongas FastAPI directamente a Internet sin token ni túnel privado (Tailscale).
 
 ### Cómo funciona la cola multi-usuario (`JobManager`)
 
 - Aunque varios computadores envíen simulaciones al mismo tiempo, `JobManager` las ordena en una **cola secuencial** (1 simulación CST a la vez) para evitar choques de licencia o proyectos abiertos en CST Studio Suite.
 - Cada simulación crea su propia carpeta independiente en `backend/runs/cst_<fecha>_<modo>_<id>/` con `input.json`, `metadata.json`, `cst_result_tree.txt` y el proyecto `.cst`, sin sobrescribir corridas anteriores.
-- Cada cliente ve en **Resultados** el avance en tiempo real, el historial compartido del servidor y puede descargar los parámetros S en CSV o reabrir cualquier caso.
+- Cada cliente ve en **Resultados** el avance en tiempo real, las líneas/tabla de referencia del artículo SoftwareX, el historial compartido del servidor y puede descargar S-parámetros en CSV, copiar el resumen o exportar la placa en SVG.
 
 ## Reglas de trabajo
 

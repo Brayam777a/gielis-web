@@ -10,10 +10,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import {
   api,
+  getApiToken,
   getApiUrl,
   hasSavedApiUrl,
   isServedByBackend,
   NetworkError,
+  setApiToken,
   setApiUrl,
   type Health,
   type JobDetail,
@@ -46,6 +48,7 @@ const messageOf = (e: unknown) => (e instanceof Error ? e.message : String(e))
 
 export function useSimulation() {
   const [apiUrl, setApiUrlState] = useState<string>(() => getApiUrl())
+  const [apiToken, setApiTokenState] = useState<string>(() => getApiToken())
   const [server, setServer] = useState<ServerState>(AUTO_CONNECT ? { kind: 'checking' } : { kind: 'idle' })
   // Cada vez que este número cambia se vuelve a preguntar por el servidor.
   const [attempt, setAttempt] = useState(AUTO_CONNECT ? 1 : 0)
@@ -92,7 +95,7 @@ export function useSimulation() {
     return () => {
       stop = true
     }
-  }, [online, historyVersion])
+  }, [online, historyVersion, apiToken])
 
   // 3. La simulación elegida: se consulta hasta que termina.
   useEffect(() => {
@@ -162,9 +165,12 @@ export function useSimulation() {
     setAttempt((n) => n + 1)
   }, [])
 
-  const setServerUrl = useCallback((nextUrl: string) => {
+  const setServerUrl = useCallback((nextUrl: string, nextToken?: string) => {
     const normalized = setApiUrl(nextUrl)
     setApiUrlState(normalized)
+    if (nextToken !== undefined) {
+      setApiTokenState(setApiToken(nextToken))
+    }
     setError(null)
     setSelectedId(null)
     setJob(null)
@@ -178,6 +184,7 @@ export function useSimulation() {
 
   return {
     apiUrl,
+    apiToken,
     setServerUrl,
     server,
     connect,

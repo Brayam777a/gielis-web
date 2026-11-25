@@ -31,6 +31,7 @@
   --step-2: 1.75rem;
   --radius-control: 6px;
   --radius-panel: 12px;
+  --ease-out: cubic-bezier(0.22, 1, 0.36, 1);
 
   color-scheme: light;
 }
@@ -87,5 +88,6 @@ input {
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+    transform: none !important;
   }
 }

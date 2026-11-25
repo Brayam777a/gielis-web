@@ -13,15 +13,17 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
   const { server } = sim
   const [editingServer, setEditingServer] = useState(false)
   const [draftUrl, setDraftUrl] = useState(sim.apiUrl)
+  const [draftToken, setDraftToken] = useState(sim.apiToken)
 
   function openEditor() {
     setDraftUrl(sim.apiUrl)
+    setDraftToken(sim.apiToken)
     setEditingServer(true)
   }
 
   function submitServer(e: FormEvent) {
     e.preventDefault()
-    sim.setServerUrl(draftUrl)
+    sim.setServerUrl(draftUrl, draftToken)
     setEditingServer(false)
   }
 
@@ -34,6 +36,14 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
         onChange={(e) => setDraftUrl(e.target.value)}
         placeholder="http://192.168.1.50:8000"
         aria-label="Dirección del servidor CST"
+      />
+      <input
+        type="password"
+        className="simulate__token-input"
+        value={draftToken}
+        onChange={(e) => setDraftToken(e.target.value)}
+        placeholder="Token API (opcional)"
+        aria-label="Token API (opcional)"
       />
       <button type="submit" className="button">
         Conectar
@@ -50,6 +60,7 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
       onClick={openEditor}
     >
       Servidor: {sim.apiUrl.replace(/^https?:\/\//i, '')}
+      {sim.apiToken ? ' · con token' : ''}
     </button>
   )
 
@@ -65,11 +76,15 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
   }
 
   const online = server.kind === 'online'
+  const queueDepth = online ? (server.health.queue_depth ?? 0) : 0
+  const needsToken = online && Boolean(server.health.auth_required) && !sim.apiToken
   const reason = !online
     ? 'Enciende el servidor para simular.'
-    : !caseRequest
-      ? 'Corrige los campos marcados en rojo.'
-      : undefined
+    : needsToken
+      ? 'Ingresa el token API en Servidor para simular.'
+      : !caseRequest
+        ? 'Corrige los campos marcados en rojo.'
+        : undefined
 
   return (
     <div className="simulate">
@@ -77,12 +92,18 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
         {server.kind === 'checking' && 'Buscando el servidor…'}
         {server.kind === 'offline' && 'Servidor apagado'}
         {online && (server.health.simulator === 'mock' ? 'Servidor listo · datos de prueba' : 'Servidor listo · CST')}
+        {queueDepth > 0 && ` · ${queueDepth} en cola`}
       </span>
+      {needsToken && !editingServer && (
+        <button type="button" className="link-button simulate__auth-warn" onClick={openEditor}>
+          Requiere token
+        </button>
+      )}
       {serverControl}
       <button
         type="button"
         className="button button--primary"
-        disabled={!online || !caseRequest || sim.starting}
+        disabled={!online || !caseRequest || sim.starting || needsToken}
         title={reason}
         onClick={onSimulate}
       >

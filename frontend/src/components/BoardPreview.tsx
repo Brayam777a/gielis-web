@@ -102,6 +102,41 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
   const drag = useRef<{ x: number; y: number; mmPerPx: number } | null>(null)
 
   const paths = useMemo(() => layers.map((l) => ({ ...l, d: toPath(l.contours, l.closed) })), [layers])
+  const svgRef = useRef<SVGSVGElement | null>(null)
+
+  function exportSvg() {
+    if (!svgRef.current) return
+    const clone = svgRef.current.cloneNode(true) as SVGSVGElement
+    clone.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
+    const ns = 'http://www.w3.org/2000/svg'
+    const style = document.createElementNS(ns, 'style')
+    style.textContent = [
+      '.board__bg{fill:#163a2c}',
+      '.board__substrate{fill:#1e4d3b;stroke:#c27c3e;stroke-width:1}',
+      '.board__copper{fill:#c27c3e;fill-rule:evenodd}',
+      '.board__trace{fill:#e0a06a;fill-opacity:.6;stroke:#e8e6d9;stroke-width:.8;stroke-dasharray:4 3}',
+      '.board__curve{fill:none;stroke:#e8e6d9;stroke-width:1.5;stroke-dasharray:4 3}',
+      '.board__grid{stroke:#e8e6d9;stroke-opacity:.1;stroke-width:1}',
+      '.board__axis{stroke:#e8e6d9;stroke-opacity:.28;stroke-width:1}',
+      '.board__dims line{stroke:#e8e6d9;stroke-width:1;stroke-opacity:.8}',
+      '.board__dims text{fill:#e8e6d9;font-family:system-ui,sans-serif}',
+    ].join('')
+    const bg = document.createElementNS(ns, 'rect')
+    bg.setAttribute('x', String(-halfX))
+    bg.setAttribute('y', String(-halfY))
+    bg.setAttribute('width', String(2 * halfX))
+    bg.setAttribute('height', String(2 * halfY))
+    bg.setAttribute('class', 'board__bg')
+    clone.prepend(bg)
+    clone.prepend(style)
+    const blob = new Blob([new XMLSerializer().serializeToString(clone)], { type: 'image/svg+xml;charset=utf-8' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'gielis-placa.svg'
+    a.click()
+    URL.revokeObjectURL(url)
+  }
 
   const gridX: number[] = []
   for (let v = Math.ceil(-halfX / step) * step; v <= halfX + 1e-9; v += step) gridX.push(Number(v.toFixed(10)))
@@ -153,6 +188,7 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
   return (
     <figure className="board">
       <svg
+        ref={svgRef}
         className={onMove ? 'board__svg board__svg--movable' : 'board__svg'}
         viewBox={`${-halfX} ${-halfY} ${2 * halfX} ${2 * halfY}`}
         style={{ aspectRatio: `${2 * halfX} / ${2 * halfY}` }}
@@ -261,6 +297,9 @@ export function BoardPreview({ layers, legend, description, frame, onMove }: Pro
           </span>
         ))}
         {onMove && <span className="board__hint">Arrastra la figura para moverla</span>}
+        <button type="button" className="link-button board__export" onClick={exportSvg}>
+          Exportar SVG
+        </button>
         <span className="board__scale">Cada cuadro mide {formatMm(step)} mm</span>
       </figcaption>
     </figure>

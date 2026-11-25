@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { type JobDetail, type SimulationResult } from '../lib/api.ts'
 import { parseCaseFile, type LoadedCase } from '../lib/caseFile.ts'
 import type { CaseRequest } from '../lib/design.ts'
-import { MODE_NAMES } from '../lib/examples.ts'
+import { getPublishedReferences, MODE_NAMES } from '../lib/examples.ts'
 import { isFinished, nearestIndex, resultToCsv, sameJson, shortTime, STATUS_LABEL } from '../lib/simulation.ts'
 import type { SimulationState } from '../lib/useSimulation.ts'
 import { ResultsChart, type Marker, type Series } from './ResultsChart.tsx'
@@ -111,7 +111,10 @@ function MainArea({ sim, currentCase }: Pick<Props, 'sim' | 'currentCase'>) {
 
 function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResult; stale: boolean }) {
   const [hover, setHover] = useState<number | null>(null)
+  const [showRefs, setShowRefs] = useState(true)
   const f = result.frequency_ghz
+  const refs = getPublishedReferences(job.case.mode, job.case.structure_type)
+  const activeRefs = showRefs ? refs : []
 
   const sSeries: Series[] = []
   if (result.s11_db) sSeries.push({ label: 'S11', values: result.s11_db, tone: 's11' })
@@ -132,12 +135,21 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
           {stale && <li>El diseño cambió después de esta simulación ({shortTime(job.created_at)}).</li>}
         </ul>
       )}
+      {refs.length > 0 && (
+        <div className="results__toolbar">
+          <label className="results__toggle">
+            <input type="checkbox" checked={showRefs} onChange={(e) => setShowRefs(e.target.checked)} />
+            Mostrar picos de referencia del artículo
+          </label>
+        </div>
+      )}
       <ResultsChart
         title="Parámetros S"
         unit="dB"
         frequency={f}
         series={sSeries}
         markers={markers}
+        references={activeRefs}
         hover={hover}
         onHover={setHover}
       />
@@ -148,6 +160,7 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
           frequency={f}
           series={[{ label: result.s21_db ? 'A = 1 − |S11|² − |S21|²' : 'A = 1 − |S11|²', values: absorption, tone: 'absorption' }]}
           domain={[0, 100]}
+          references={activeRefs}
           hover={hover}
           onHover={setHover}
         />
@@ -161,11 +174,21 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
               ...(absorption ? [`A = ${fmt(absorption[hover], 1)} %`] : []),
             ].join('   ·   ')}
       </p>
+      {result.simulator === 'cst' && result.notes.length > 0 && (
+        <ul className="results__notes">
+          {result.notes.map((n) => (
+            <li key={n}>{n}</li>
+          ))}
+        </ul>
+      )}
     </div>
   )
 }
 
 function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: SimulationResult; onLoadCase: (c: LoadedCase) => void }) {
+  const [copied, setCopied] = useState(false)
+  const refs = getPublishedReferences(job.case.mode, job.case.structure_type)
+
   function download() {
     const blob = new Blob([resultToCsv(result)], { type: 'text/csv' })
     const url = URL.createObjectURL(blob)
@@ -179,6 +202,23 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
   function loadCase() {
     const parsed = parseCaseFile(JSON.stringify(job.case))
     if (parsed.ok) onLoadCase(parsed.value)
+  }
+
+  async function copySummary() {
+    const lines = [
+      `Gielis Web · ${MODE_NAMES[job.case.mode]} (${job.case.structure_type}) · ${result.simulator.toUpperCase()}`,
+      ...result.resonances.map((r) => {
+        const a = r.absorption_pct !== null ? ` · A = ${fmt(r.absorption_pct, 1)} %` : ''
+        return `- ${fmt(r.frequency_ghz, 3)} GHz · ${r.parameter} = ${fmt(r.value_db)} dB${a}`
+      }),
+    ]
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'))
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1800)
+    } catch {
+      // portapapeles no disponible
+    }
   }
 
   return (
@@ -210,10 +250,41 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
         <button type="button" className="button" onClick={download}>
           Descargar CSV
         </button>
+        <button type="button" className="button" onClick={() => void copySummary()}>
+          {copied ? 'Copiado' : 'Copiar resumen'}
+        </button>
         <button type="button" className="button" onClick={loadCase}>
           Cargar este caso
         </button>
       </div>
+      {refs.length > 0 && (
+        <div className="results__ref-section">
+          <h3 className="results__heading">Referencia del artículo (SoftwareX)</h3>
+          <table className="results__table">
+            <thead>
+              <tr>
+                <th scope="col">GHz</th>
+                <th scope="col">{refs[0].parameter} (dB)</th>
+                {refs.some((r) => r.absorption_pct !== undefined) && <th scope="col">A (%)</th>}
+              </tr>
+            </thead>
+            <tbody>
+              {refs.map((r) => (
+                <tr key={r.label}>
+                  <td>{fmt(r.frequency_ghz, 3)}</td>
+                  <td>{r.value_db !== undefined ? fmt(r.value_db) : '—'}</td>
+                  {refs.some((x) => x.absorption_pct !== undefined) && (
+                    <td>{r.absorption_pct !== undefined ? fmt(r.absorption_pct, 1) : '—'}</td>
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {job.case.mode === 'sensor' && (
+            <p className="results__ref-note">Referencia Tabla 3 para gota con εr = 1 (baja a 3,821 GHz en εr = 70).</p>
+          )}
+        </div>
+      )}
     </section>
   )
 }

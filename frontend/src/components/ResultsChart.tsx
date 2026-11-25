@@ -10,6 +10,8 @@ export type Series = {
 
 export type Marker = { index: number; tone: Series['tone'] }
 
+export type ReferenceLine = { label: string; frequency_ghz: number }
+
 type Props = {
   title: string
   unit: string
@@ -18,6 +20,7 @@ type Props = {
   /** Límites del eje vertical; si no se dan, se calculan con los datos. */
   domain?: [number, number]
   markers?: Marker[]
+  references?: ReferenceLine[]
   /** Punto bajo el mouse, compartido entre las gráficas. */
   hover: number | null
   onHover: (index: number | null) => void
@@ -45,7 +48,17 @@ function useSize() {
  * Gráfica de líneas contra la frecuencia, dibujada con SVG (sin librerías).
  * Al pasar el mouse marca la frecuencia más cercana en todas las gráficas.
  */
-export function ResultsChart({ title, unit, frequency, series, domain, markers = [], hover, onHover }: Props) {
+export function ResultsChart({
+  title,
+  unit,
+  frequency,
+  series,
+  domain,
+  markers = [],
+  references = [],
+  hover,
+  onHover,
+}: Props) {
   const [ref, { width, height }] = useSize()
 
   const fMin = frequency[0]
@@ -120,6 +133,16 @@ export function ResultsChart({ title, unit, frequency, series, domain, markers =
             {series.map((s) => (
               <path key={s.label} d={path(s.values)} className={`results-chart__line results-chart__line--${s.tone}`} />
             ))}
+            {references
+              .filter((r) => r.frequency_ghz >= fMin && r.frequency_ghz <= fMax)
+              .map((r) => (
+                <g key={r.label} className="results-chart__ref" aria-hidden="true">
+                  <line x1={x(r.frequency_ghz)} x2={x(r.frequency_ghz)} y1={M.top} y2={M.top + plotH} />
+                  <text x={x(r.frequency_ghz) + 3} y={M.top + 11}>
+                    {r.frequency_ghz}
+                  </text>
+                </g>
+              ))}
             {markers.map((m) => {
               const s = series.find((ss) => ss.tone === m.tone)
               if (!s) return null

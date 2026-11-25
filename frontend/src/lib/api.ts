@@ -8,6 +8,7 @@ import type { CaseRequest } from './design.ts'
 import type { Mode, StructureType } from './examples.ts'
 
 const STORAGE_KEY = 'gielis.api_url'
+const TOKEN_STORAGE_KEY = 'gielis.api_token'
 
 export function isServedByBackend(): boolean {
   if (typeof window === 'undefined') return false
@@ -77,6 +78,31 @@ export function setApiUrl(raw: string): string {
   return normalized
 }
 
+export function getApiToken(): string {
+  if (typeof window === 'undefined') return ''
+  try {
+    return window.sessionStorage.getItem(TOKEN_STORAGE_KEY)?.trim() ?? ''
+  } catch {
+    return ''
+  }
+}
+
+export function setApiToken(raw: string): string {
+  const token = raw.trim()
+  if (typeof window !== 'undefined') {
+    try {
+      if (token) {
+        window.sessionStorage.setItem(TOKEN_STORAGE_KEY, token)
+      } else {
+        window.sessionStorage.removeItem(TOKEN_STORAGE_KEY)
+      }
+    } catch {
+      // sessionStorage no disponible
+    }
+  }
+  return token
+}
+
 export type JobStatus = 'queued' | 'building' | 'simulating' | 'done' | 'failed' | 'cancelled'
 
 export type Resonance = {
@@ -114,7 +140,13 @@ export type JobSummary = {
 
 export type JobDetail = JobSummary & { case: CaseRequest; result: SimulationResult | null }
 
-export type Health = { status: 'ok'; version: string; simulator: string }
+export type Health = {
+  status: 'ok'
+  version: string
+  simulator: string
+  auth_required?: boolean
+  queue_depth?: number
+}
 
 export class ApiError extends Error {}
 
@@ -123,11 +155,16 @@ export class NetworkError extends ApiError {}
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const baseUrl = getApiUrl()
+  const token = getApiToken()
+  const headers: Record<string, string> = {}
+  if (init?.body) headers['Content-Type'] = 'application/json'
+  if (token) headers['X-API-Key'] = token
+
   let response: Response
   try {
     response = await fetch(baseUrl + path, {
       ...init,
-      headers: init?.body ? { 'Content-Type': 'application/json' } : undefined,
+      headers: Object.keys(headers).length > 0 ? headers : undefined,
     })
   } catch {
     // fetch solo falla así cuando no hay respuesta: servidor apagado o sin red.

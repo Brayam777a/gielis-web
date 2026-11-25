@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { defaultApiUrl, getApiUrl, normalizeApiUrl, setApiUrl, type SimulationResult } from './api.ts'
+import { defaultApiUrl, getApiToken, getApiUrl, normalizeApiUrl, setApiToken, setApiUrl, type SimulationResult } from './api.ts'
+import { getPublishedReferences } from './examples.ts'
 import { axisTicks, isFinished, nearestIndex, resultToCsv, sameJson } from './simulation.ts'
 
 describe('simulation', () => {
@@ -76,5 +77,38 @@ describe('simulation', () => {
       if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
       else (globalThis as { window?: unknown }).window = prevWindow
     }
+  })
+
+  it('guarda y limpia el token API en sessionStorage', () => {
+    expect(getApiToken()).toBe('')
+    const session = new Map<string, string>()
+    const prevWindow = (globalThis as { window?: unknown }).window
+    ;(globalThis as { window?: unknown }).window = {
+      sessionStorage: {
+        getItem: (k: string) => session.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          session.set(k, v)
+        },
+        removeItem: (k: string) => {
+          session.delete(k)
+        },
+      },
+    }
+    try {
+      expect(setApiToken('  mi-token  ')).toBe('mi-token')
+      expect(getApiToken()).toBe('mi-token')
+      expect(setApiToken('')).toBe('')
+      expect(getApiToken()).toBe('')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+    }
+  })
+
+  it('devuelve las referencias publicadas del artículo por modo y estructura', () => {
+    expect(getPublishedReferences('absorber', 'normal').map((r) => r.frequency_ghz)).toEqual([2.435, 3.849])
+    expect(getPublishedReferences('transmitter', 'normal').map((r) => r.frequency_ghz)).toEqual([3.114, 3.478, 5.403])
+    expect(getPublishedReferences('transmitter', 'complementary').map((r) => r.frequency_ghz)).toEqual([3.513, 4.745])
+    expect(getPublishedReferences('sensor', 'complementary').map((r) => r.frequency_ghz)).toEqual([4.171])
   })
 })

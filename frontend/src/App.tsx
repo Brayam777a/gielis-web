@@ -144,6 +144,15 @@ export default function App() {
     setStructureType(EXAMPLES[mode].structure)
   }
 
+  function selectMode(nextMode: Mode) {
+    setMode(nextMode)
+    if (isArticleCase) {
+      setInputs(toInputs(EXAMPLES[nextMode]))
+      setStructureType(EXAMPLES[nextMode].structure)
+      setFitMessage(null)
+    }
+  }
+
   // Qué se dibuja en la placa según la vista elegida.
   const board = useMemo((): { layers: Layer[]; legend: LegendItem[]; description: string } | null => {
     if (view === 'curve') {
@@ -200,6 +209,9 @@ export default function App() {
       <header className="app__header">
         <h1 className="app__title">Gielis Web</h1>
         <p className="app__subtitle">Diseño de estructuras microstrip con la súperfórmula de Gielis</p>
+        <span className="app__badge">
+          {MODE_NAMES[mode]} · {STRUCTURE_NAMES[effectiveStructure]}
+        </span>
       </header>
 
       <main className="app__main">
@@ -213,7 +225,7 @@ export default function App() {
                   type="button"
                   className="segmented__button"
                   aria-pressed={mode === m}
-                  onClick={() => setMode(m)}
+                  onClick={() => selectMode(m)}
                 >
                   {MODE_NAMES[m]}
                 </button>
