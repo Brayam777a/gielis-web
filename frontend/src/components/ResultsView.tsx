@@ -150,6 +150,7 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
         series={sSeries}
         markers={markers}
         references={activeRefs}
+        exportName={`${job.id}-s-params.svg`}
         hover={hover}
         onHover={setHover}
       />
@@ -161,6 +162,7 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
           series={[{ label: result.s21_db ? 'A = 1 − |S11|² − |S21|²' : 'A = 1 − |S11|²', values: absorption, tone: 'absorption' }]}
           domain={[0, 100]}
           references={activeRefs}
+          exportName={`${job.id}-absorcion.svg`}
           hover={hover}
           onHover={setHover}
         />
@@ -183,6 +185,26 @@ function Charts({ job, result, stale }: { job: JobDetail; result: SimulationResu
       )}
     </div>
   )
+}
+
+function closestDeltaMhz(
+  freqGhz: number,
+  parameter: 'S11' | 'S21',
+  resonances: SimulationResult['resonances'],
+): string {
+  const candidates = resonances.filter((r) => r.parameter === parameter)
+  if (candidates.length === 0) return '—'
+  let best = candidates[0]
+  let bestDist = Math.abs(best.frequency_ghz - freqGhz)
+  for (const r of candidates) {
+    const d = Math.abs(r.frequency_ghz - freqGhz)
+    if (d < bestDist) {
+      best = r
+      bestDist = d
+    }
+  }
+  const mhz = Math.round((best.frequency_ghz - freqGhz) * 1000)
+  return `${mhz >= 0 ? '+' : '−'}${Math.abs(mhz)} MHz`
 }
 
 function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: SimulationResult; onLoadCase: (c: LoadedCase) => void }) {
@@ -266,6 +288,7 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
                 <th scope="col">GHz</th>
                 <th scope="col">{refs[0].parameter} (dB)</th>
                 {refs.some((r) => r.absorption_pct !== undefined) && <th scope="col">A (%)</th>}
+                {result.resonances.length > 0 && <th scope="col">Δf</th>}
               </tr>
             </thead>
             <tbody>
@@ -275,6 +298,9 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
                   <td>{r.value_db !== undefined ? fmt(r.value_db) : '—'}</td>
                   {refs.some((x) => x.absorption_pct !== undefined) && (
                     <td>{r.absorption_pct !== undefined ? fmt(r.absorption_pct, 1) : '—'}</td>
+                  )}
+                  {result.resonances.length > 0 && (
+                    <td className="results__delta">{closestDeltaMhz(r.frequency_ghz, r.parameter, result.resonances)}</td>
                   )}
                 </tr>
               ))}
@@ -292,8 +318,11 @@ function ResultSide({ job, result, onLoadCase }: { job: JobDetail; result: Simul
 function History({ sim }: { sim: SimulationState }) {
   if (sim.history.length === 0) return null
   return (
-    <section aria-label="Historial">
-      <h2 className="results__heading">Historial</h2>
+    <details className="history-box" open>
+      <summary className="history-box__summary">
+        <span>Historial</span>
+        <span className="history-box__count">{sim.history.length}</span>
+      </summary>
       <ul className="history">
         {sim.history.slice(0, 30).map((h) => (
           <li key={h.id}>
@@ -310,6 +339,6 @@ function History({ sim }: { sim: SimulationState }) {
           </li>
         ))}
       </ul>
-    </section>
+    </details>
   )
 }

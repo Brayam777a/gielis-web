@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from 'react'
+import { useEffect, useRef, useState, type FormEvent } from 'react'
 import type { CaseRequest } from '../lib/design.ts'
 import type { SimulationState } from '../lib/useSimulation.ts'
 
@@ -14,8 +14,31 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
   const [editingServer, setEditingServer] = useState(false)
   const [draftUrl, setDraftUrl] = useState(sim.apiUrl)
   const [draftToken, setDraftToken] = useState(sim.apiToken)
+  const wrapRef = useRef<HTMLDivElement | null>(null)
 
-  function openEditor() {
+  useEffect(() => {
+    if (!editingServer) return
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setEditingServer(false)
+    }
+    function onPointerDown(e: PointerEvent) {
+      if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) {
+        setEditingServer(false)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    window.addEventListener('pointerdown', onPointerDown)
+    return () => {
+      window.removeEventListener('keydown', onKeyDown)
+      window.removeEventListener('pointerdown', onPointerDown)
+    }
+  }, [editingServer])
+
+  function toggleEditor() {
+    if (editingServer) {
+      setEditingServer(false)
+      return
+    }
     setDraftUrl(sim.apiUrl)
     setDraftToken(sim.apiToken)
     setEditingServer(true)
@@ -27,41 +50,53 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
     setEditingServer(false)
   }
 
-  const serverControl = editingServer ? (
-    <form className="simulate__server-form" onSubmit={submitServer}>
-      <input
-        type="text"
-        className="simulate__server-input"
-        value={draftUrl}
-        onChange={(e) => setDraftUrl(e.target.value)}
-        placeholder="http://192.168.1.50:8000"
-        aria-label="Dirección del servidor CST"
-      />
-      <input
-        type="password"
-        className="simulate__token-input"
-        value={draftToken}
-        onChange={(e) => setDraftToken(e.target.value)}
-        placeholder="Token API (opcional)"
-        aria-label="Token API (opcional)"
-      />
-      <button type="submit" className="button">
-        Conectar
+  const serverControl = (
+    <div className="simulate__server-wrap" ref={wrapRef}>
+      <button
+        type="button"
+        className="link-button simulate__server-toggle"
+        aria-expanded={editingServer}
+        title="Cambiar dirección del servidor CST"
+        onClick={toggleEditor}
+      >
+        Servidor: {sim.apiUrl.replace(/^https?:\/\//i, '')}
+        {sim.apiToken ? ' · con token' : ''}
       </button>
-      <button type="button" className="button" onClick={() => setEditingServer(false)}>
-        Cancelar
-      </button>
-    </form>
-  ) : (
-    <button
-      type="button"
-      className="link-button simulate__server-toggle"
-      title="Cambiar dirección del servidor CST"
-      onClick={openEditor}
-    >
-      Servidor: {sim.apiUrl.replace(/^https?:\/\//i, '')}
-      {sim.apiToken ? ' · con token' : ''}
-    </button>
+      {editingServer && (
+        <form className="simulate__popover" onSubmit={submitServer} aria-label="Configurar servidor">
+          <label className="simulate__popover-field">
+            <span>Dirección del servidor</span>
+            <input
+              type="text"
+              className="simulate__server-input"
+              value={draftUrl}
+              onChange={(e) => setDraftUrl(e.target.value)}
+              placeholder="http://192.168.1.50:8000"
+              autoFocus
+            />
+          </label>
+          <label className="simulate__popover-field">
+            <span>Token API (opcional)</span>
+            <input
+              type="password"
+              className="simulate__token-input"
+              value={draftToken}
+              onChange={(e) => setDraftToken(e.target.value)}
+              placeholder="Solo si el servidor usa GIELIS_API_TOKEN"
+            />
+          </label>
+          <p className="simulate__popover-hint">Ej.: http://100.x.y.z:8000 (Tailscale o LAN)</p>
+          <div className="simulate__popover-actions">
+            <button type="submit" className="button button--primary">
+              Conectar
+            </button>
+            <button type="button" className="button" onClick={() => setEditingServer(false)}>
+              Cancelar
+            </button>
+          </div>
+        </form>
+      )}
+    </div>
   )
 
   if (server.kind === 'idle') {
@@ -95,7 +130,7 @@ export function SimulateBar({ sim, caseRequest, onSimulate }: Props) {
         {queueDepth > 0 && ` · ${queueDepth} en cola`}
       </span>
       {needsToken && !editingServer && (
-        <button type="button" className="link-button simulate__auth-warn" onClick={openEditor}>
+        <button type="button" className="link-button simulate__auth-warn" onClick={toggleEditor}>
           Requiere token
         </button>
       )}

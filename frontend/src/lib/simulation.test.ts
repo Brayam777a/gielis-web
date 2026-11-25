@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { defaultApiUrl, getApiToken, getApiUrl, normalizeApiUrl, setApiToken, setApiUrl, type SimulationResult } from './api.ts'
 import { getPublishedReferences } from './examples.ts'
 import { axisTicks, isFinished, nearestIndex, resultToCsv, sameJson } from './simulation.ts'
+import { applyTheme, getThemePreference, setThemePreference } from './theme.ts'
 
 describe('simulation', () => {
   it('sabe qué estados ya no cambian', () => {
@@ -110,5 +111,47 @@ describe('simulation', () => {
     expect(getPublishedReferences('transmitter', 'normal').map((r) => r.frequency_ghz)).toEqual([3.114, 3.478, 5.403])
     expect(getPublishedReferences('transmitter', 'complementary').map((r) => r.frequency_ghz)).toEqual([3.513, 4.745])
     expect(getPublishedReferences('sensor', 'complementary').map((r) => r.frequency_ghz)).toEqual([4.171])
+  })
+
+  it('guarda y aplica la preferencia de tema (sistema, claro, oscuro)', () => {
+    expect(getThemePreference()).toBe('system')
+    const store = new Map<string, string>()
+    const dataset: Record<string, string> = {}
+    const prevWindow = (globalThis as { window?: unknown }).window
+    const prevDoc = (globalThis as { document?: unknown }).document
+    ;(globalThis as { window?: unknown }).window = {
+      localStorage: {
+        getItem: (k: string) => store.get(k) ?? null,
+        setItem: (k: string, v: string) => {
+          store.set(k, v)
+        },
+        removeItem: (k: string) => {
+          store.delete(k)
+        },
+      },
+    }
+    ;(globalThis as { document?: unknown }).document = {
+      documentElement: { dataset },
+    }
+    try {
+      expect(setThemePreference('dark')).toBe('dark')
+      expect(getThemePreference()).toBe('dark')
+      expect(dataset.theme).toBe('dark')
+
+      expect(setThemePreference('light')).toBe('light')
+      expect(dataset.theme).toBe('light')
+
+      expect(setThemePreference('system')).toBe('system')
+      expect(getThemePreference()).toBe('system')
+      expect(dataset.theme).toBeUndefined()
+
+      applyTheme('dark')
+      expect(dataset.theme).toBe('dark')
+    } finally {
+      if (prevWindow === undefined) delete (globalThis as { window?: unknown }).window
+      else (globalThis as { window?: unknown }).window = prevWindow
+      if (prevDoc === undefined) delete (globalThis as { document?: unknown }).document
+      else (globalThis as { document?: unknown }).document = prevDoc
+    }
   })
 })
